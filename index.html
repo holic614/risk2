@@ -6,7 +6,7 @@
   <title>현장 위험성 평가표 작성 시스템</title>
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#4f46e5">
-  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/1162/1162251.png">
+  <link rel="apple-touch-icon" href="ICON.png">
   
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -50,21 +50,13 @@
       max-height: 1000px;
       opacity: 1;
     }
-    /* 좌우 드래그 스와이프 유도 힌트 바운스 연출 */
-    @keyframes bounce-x {
-      0%, 100% { transform: translateX(0); }
-      50% { transform: translateX(6px); }
-    }
-    .swipe-hint-anim {
-      animation: bounce-x 1.4s infinite;
-    }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans antialiased select-none overflow-x-hidden">
 
-  <div class="max-w-md mx-auto min-h-screen flex flex-col bg-white shadow-2xl relative overflow-hidden">
+  <div class="max-w-md mx-auto h-screen h-[100dvh] flex flex-col bg-white shadow-2xl relative overflow-hidden">
     
-    <header class="bg-white border-b border-slate-100 pt-5 pb-4 sticky top-0 z-50 px-4">
+    <header class="bg-white border-b border-slate-100 pt-5 pb-4 shrink-0 z-50 px-4">
       <div class="flex justify-between items-center mb-4">
         <h1 class="text-base font-extrabold text-slate-900 tracking-tight flex items-center gap-1.5">
           <i class="fa-solid fa-triangle-exclamation text-indigo-600"></i> 현장 위험성 평가표
@@ -84,7 +76,7 @@
       </div>
     </header>
 
-    <main class="flex-1 overflow-hidden relative min-h-[calc(100vh-120px)]">
+    <main class="flex-1 min-h-0 overflow-hidden relative">
       <div id="swiper-wrapper" class="swiper-container">
         
         <section class="swiper-slide p-4 flex flex-col justify-between">
@@ -135,8 +127,8 @@
             </div>
             </div>
           
-          <div class="text-center text-xs text-slate-400 font-bold pb-2 pt-6 swipe-hint-anim">
-            밀어서 다음 단계 이동 <i class="fa-solid fa-arrow-right ml-0.5"></i>
+          <div class="flex justify-end pb-2 pt-6">
+            <button type="button" onclick="goToStep(1)" class="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-md transition hover:bg-indigo-700 cursor-pointer">다음 <i class="fa-solid fa-arrow-right ml-1"></i></button>
           </div>
         </section>
 
@@ -164,8 +156,12 @@
             </div>
 
             <div class="bg-white border border-slate-100 p-3.5 rounded-xl shadow-sm">
-              <span class="block text-xs font-bold text-slate-400 mb-2 tracking-wider">현장 기상 상태 분류</span>
-              <div class="grid grid-cols-2 gap-2">
+              <div class="flex justify-between items-center mb-2">
+                <span class="block text-xs font-bold text-slate-400 tracking-wider">현장 기상 상태 분류</span>
+                <button type="button" onclick="saveCheckboxGroup('group_weather')" class="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded text-[10px] transition shadow-sm cursor-pointer">저장</button>
+              </div>
+              <div id="group_weather">
+                <div class="grid grid-cols-2 gap-2">
                 <label class="custom-checkbox flex items-center p-2 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-lg cursor-pointer transition">
                   <input type="checkbox" value="weather_clear" onchange="generateImage()" class="hidden">
                   <div class="checkbox-box w-5 h-5 border-2 border-slate-300 rounded mr-2.5 flex items-center justify-center bg-white text-white"><i class="fa-solid fa-check text-[10px] scale-0 opacity-0 transition-all"></i></div>
@@ -191,12 +187,17 @@
                   <div class="checkbox-box w-5 h-5 border-2 border-slate-300 rounded mr-2.5 flex items-center justify-center bg-white text-white"><i class="fa-solid fa-check text-[10px] scale-0 opacity-0 transition-all"></i></div>
                   <span class="text-xs font-semibold text-slate-700">한파</span>
                 </label>
+                </div>
               </div>
             </div>
 
             <div class="bg-white border border-slate-100 p-3.5 rounded-xl shadow-sm">
-              <span class="block text-xs font-bold text-slate-400 mb-2 tracking-wider">투입 중장비 유형 제원</span>
-              <div class="grid grid-cols-2 gap-2">
+              <div class="flex justify-between items-center mb-2">
+                <span class="block text-xs font-bold text-slate-400 tracking-wider">투입 중장비 유형 제원</span>
+                <button type="button" onclick="saveCheckboxGroup('group_machine')" class="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded text-[10px] transition shadow-sm cursor-pointer">저장</button>
+              </div>
+              <div id="group_machine">
+                <div class="grid grid-cols-2 gap-2">
                 <label class="custom-checkbox flex items-center p-2 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-lg cursor-pointer transition">
                   <input type="checkbox" id="machine_crane_cb" value="machine_crane" onchange="toggleEtc('machine_crane_cb','machine_crane_wrap')" class="hidden">
                   <div class="checkbox-box w-5 h-5 border-2 border-slate-300 rounded mr-2.5 flex items-center justify-center bg-white text-white"><i class="fa-solid fa-check text-[10px] scale-0 opacity-0 transition-all"></i></div>
@@ -255,10 +256,12 @@
               <div id="machine_etc_wrap" class="etc-input mt-2" style="display: none;">
                 <input type="text" id="machine_ect_text" placeholder="기타 장비명을 명확하게 기록하세요" oninput="generateImage()" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
               </div>
+              </div>
             </div>
           </div>
-          <div class="text-center text-xs text-slate-400 font-bold pb-2 pt-6 swipe-hint-anim">
-            <i class="fa-solid fa-arrow-left mr-0.5"></i> 밀어서 이동 <i class="fa-solid fa-arrow-right ml-0.5"></i>
+          <div class="flex justify-between pb-2 pt-6">
+            <button type="button" onclick="goToStep(0)" class="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl text-sm shadow-sm transition hover:bg-slate-300 cursor-pointer"><i class="fa-solid fa-arrow-left mr-1"></i> 이전</button>
+            <button type="button" onclick="goToStep(2)" class="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-md transition hover:bg-indigo-700 cursor-pointer">다음 <i class="fa-solid fa-arrow-right ml-1"></i></button>
           </div>
         </section>
 
@@ -305,8 +308,12 @@
             </div>
 
             <div class="bg-white border border-slate-100 p-3.5 rounded-xl shadow-sm">
-              <span class="block text-xs font-bold text-slate-400 mb-2 tracking-wider">현장 특성 구역 지정 분류</span>
-              <div class="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto pr-1">
+              <div class="flex justify-between items-center mb-2">
+                <span class="block text-xs font-bold text-slate-400 tracking-wider">현장 특성 구역 지정 분류</span>
+                <button type="button" onclick="saveCheckboxGroup('group_site_char')" class="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded text-[10px] transition shadow-sm cursor-pointer">저장</button>
+              </div>
+              <div id="group_site_char">
+                <div class="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto pr-1">
                 <label class="custom-checkbox flex items-center p-2 bg-slate-50 border border-slate-100 rounded-lg cursor-pointer transition">
                   <input type="checkbox" value="site_road_outside" onchange="generateImage()" class="hidden"><div class="checkbox-box w-4 h-4 border-2 border-slate-300 rounded mr-2 flex items-center justify-center bg-white text-white"><i class="fa-solid fa-check text-[8px] scale-0 opacity-0 transition-all"></i></div>
                   <span class="text-xs font-semibold text-slate-700">도로 가장 차선</span>
@@ -359,11 +366,15 @@
               <div id="site_site_etc_wrap" class="etc-input mt-2" style="display: none;">
                 <input type="text" id="site_site_ect_text" placeholder="기타 세부지정 사항 입력" oninput="generateImage()" class="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs">
               </div>
+              </div>
             </div>
 
             <div class="bg-white border border-slate-100 p-3.5 rounded-xl shadow-sm space-y-3">
-          <div>
-            <span class="block text-xs font-bold text-slate-400 mb-1.5 tracking-wider">공통 핵심 안전 준수사항</span>
+          <div id="group_common">
+            <div class="flex justify-between items-center mb-1.5">
+              <span class="block text-xs font-bold text-slate-400 tracking-wider">공통 핵심 안전 준수사항</span>
+              <button type="button" onclick="saveCheckboxGroup('group_common')" class="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded text-[10px] transition shadow-sm cursor-pointer">저장</button>
+            </div>
             <div class="grid grid-cols-1 gap-1.5 max-h-[400px] overflow-y-auto pr-1">
               <label class="flex items-center text-xs gap-2"><input type="checkbox" value="common_equipment" onchange="generateImage()"> 개인 보호구 착용 및 주변 동료 보호구 착용상태 확인</label>
               <label class="flex items-center text-xs gap-2"><input type="checkbox" value="common_machine" onchange="generateImage()"> 건설장비 안전장치 확인(고소차 굴착기 크레인 등)</label>
@@ -375,8 +386,11 @@
             </div>
           </div>
 
-          <div>
-            <span class="block text-xs font-bold text-slate-400 mb-1.5 tracking-wider">계절 용품 및 보호 장비 지참 현황</span>
+          <div id="group_season">
+            <div class="flex justify-between items-center mb-1.5">
+              <span class="block text-xs font-bold text-slate-400 tracking-wider">계절 용품 및 보호 장비 지참 현황</span>
+              <button type="button" onclick="saveCheckboxGroup('group_season')" class="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded text-[10px] transition shadow-sm cursor-pointer">저장</button>
+            </div>
             <div class="grid grid-cols-2 gap-1.5 max-h-[400px] overflow-y-auto pr-1 bg-slate-50 p-2 rounded-xl">
               <span class="col-span-2 text-[10px] font-bold text-amber-600"><i class="fa-solid fa-sun"></i> 혹서기 물품</span>
               <label class="flex items-center text-xs gap-1.5"><input type="checkbox" value="hot_thermometer" onchange="generateImage()"> 온습도계</label>
@@ -398,8 +412,11 @@
             </div>
           </div>
           
-          <div>
-            <span class="block text-xs font-bold text-slate-400 mb-2 tracking-wider">작업전 확인 내용</span>
+          <div id="group_precheck">
+            <div class="flex justify-between items-center mb-1.5">
+              <span class="block text-xs font-bold text-slate-400 tracking-wider">작업전 확인 내용</span>
+              <button type="button" onclick="saveCheckboxGroup('group_precheck')" class="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded text-[10px] transition shadow-sm cursor-pointer">저장</button>
+            </div>
             <div class="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto pr-1">
               <label class="flex items-center text-xs gap-1.5"><input type="checkbox" value="site_roof" onchange="generateImage()"> 건물(옥상)</label>
               <label class="flex items-center text-xs gap-1.5"><input type="checkbox" value="site_rooftop" onchange="generateImage()"> 건물(옥탑)</label>
@@ -414,8 +431,9 @@
             </div>
           </div>
           </div>
-          <div class="text-center text-xs text-slate-400 font-bold pb-2 pt-6 swipe-hint-anim">
-            <i class="fa-solid fa-arrow-left mr-0.5"></i> 밀어서 이동 <i class="fa-solid fa-arrow-right ml-0.5"></i>
+          <div class="flex justify-between pb-2 pt-6">
+            <button type="button" onclick="goToStep(1)" class="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl text-sm shadow-sm transition hover:bg-slate-300 cursor-pointer"><i class="fa-solid fa-arrow-left mr-1"></i> 이전</button>
+            <button type="button" onclick="goToStep(3)" class="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-md transition hover:bg-indigo-700 cursor-pointer">다음 <i class="fa-solid fa-arrow-right ml-1"></i></button>
           </div>
         </section>
 
@@ -432,7 +450,7 @@
                   <input type="checkbox" value="risk_fall" onchange="toggleChildrenVisible(this, 'risk_fall_group')" class="w-4 h-4 text-rose-600 mr-2.5">
               <span class="text-xs font-bold"><i class="fa-solid fa-person-falling"></i> 떨어짐 (추락)</span>
                 </label>
-                <div class="checkbox-group risk_fall_group risk_group-wrapper p-3 bg-white space-y-2 text-xs">
+                <div class="checkbox-group risk_fall_group risk-group-wrapper p-3 bg-white space-y-2 text-xs">
               <label class="flex items-center gap-2"><input type="checkbox" value="risk_fall_1" onchange="generateImage()"> 전주 균열/전주 수직상태 확인</label>
               <label class="flex items-center gap-2"><input type="checkbox" value="risk_fall_2" onchange="generateImage()"> 수직사다리 고정상태 확인 및 수직 생명줄(안전블록) 설치</label>
               <label class="flex items-center gap-2"><input type="checkbox" value="risk_fall_3" onchange="generateImage()"> 난간없는 옥상/옥탑/경사지붕 수평생명줄(안전블록) 설치</label>
@@ -445,7 +463,7 @@
                   <input type="checkbox" value="risk_fall_ladder" onchange="toggleChildrenVisible(this, 'risk_fall_ladder_group')" class="w-4 h-4 text-rose-600 mr-2.5">
               <span class="text-xs font-bold"><i class="fa-solid fa-ladder-water"></i> 떨어짐 (사다리)</span>
                 </label>
-                <div class="checkbox-group risk_fall_ladder_group risk_group-wrapper p-3 bg-white space-y-2 text-xs">
+                <div class="checkbox-group risk_fall_ladder_group risk-group-wrapper p-3 bg-white space-y-2 text-xs">
               <label class="flex items-center gap-2"><input type="checkbox" value="risk_fall_ladder_1" onchange="generateImage()"> 사다리 상부 고정 및 아웃트리거 설치 확인</label>
               <label class="flex items-center gap-2"><input type="checkbox" value="risk_fall_ladder_2" onchange="generateImage()"> 사다리 안전작업 지침 준수</label>
               <label class="flex items-center gap-2"><input type="checkbox" value="risk_fall_ladder_3" onchange="generateImage()"> 사다리 작업 중 가로서기(자세) 금지</label>
@@ -457,18 +475,18 @@
                   <input type="checkbox" value="risk_car_crush" onchange="toggleChildrenVisible(this, 'risk_car_crush_group')" class="w-4 h-4 text-rose-600 mr-2.5">
               <span class="text-xs font-bold"><i class="fa-solid fa-car-burst"></i> 주행 차량 교통사고</span>
                 </label>
-                <div class="checkbox-group risk_car_crush_group risk_group-wrapper p-3 bg-white space-y-2 text-xs">
+                <div class="checkbox-group risk_car_crush_group risk-group-wrapper p-3 bg-white space-y-2 text-xs">
               <label class="flex items-center gap-2"><input type="checkbox" value="risk_car_crush_1" onchange="generateImage()"> 안전시설물 설치 또는 차단 전문업체 활용</label>
               <label class="flex items-center gap-2"><input type="checkbox" value="risk_car_crush_2" onchange="generateImage()"> 신호수 배치 및 신호체계 확인</label>
                 </div>
               </div>
 
               <div class="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm">
-                <label class="risk-parent flex items-center p-3 bg-amber-50 text-amber-900 ursor-pointer select-none">
+                <label class="risk-parent flex items-center p-3 bg-amber-50 text-amber-900 cursor-pointer select-none">
                   <input type="checkbox" value="risk_heavy_machine" onchange="toggleChildrenVisible(this, 'risk_heavy_machine_group')" class="w-4 h-4 text-amber-600 mr-2.5">
                   <span class="text-xs font-bold"><i class="fa-solid fa-truck"></i> 건설장비 부딪힘/끼임</span>
                 </label>
-                <div class="checkbox-group risk_heavy_machine_group risk_group-wrapper p-3 bg-white space-y-2 text-xs">
+                <div class="checkbox-group risk_heavy_machine_group risk-group-wrapper p-3 bg-white space-y-2 text-xs">
                   <label class="flex items-center gap-2"><input type="checkbox" value="risk_heavy_machine_1" onchange="generateImage()"> 장비 유도자 배치 및 운전원과 신호체계 확인</label>
                   <label class="flex items-center gap-2"><input type="checkbox" value="risk_heavy_machine_2" onchange="generateImage()"> 작업반경 내 접근금지</label>
                 </div>
@@ -479,7 +497,7 @@
                   <input type="checkbox" value="risk_car_fall" onchange="toggleChildrenVisible(this, 'risk_car_fall_group')" class="w-4 h-4 text-amber-600 mr-2.5">
                   <span class="text-xs font-bold"><i class="fa-solid fa-person-falling-burst"></i> 넘어짐(인력/장비)</span>
                 </label>
-                <div class="checkbox-group risk_car_fall_group risk_group-wrapper p-3 bg-white space-y-2 text-xs">
+                <div class="checkbox-group risk_car_fall_group risk-group-wrapper p-3 bg-white space-y-2 text-xs">
                   <label class="flex items-center gap-2"><input type="checkbox" value="risk_car_fall_1" onchange="generateImage()"> 이동통로 정리정돈, 결빙/물기 제거</label>
                   <label class="flex items-center gap-2"><input type="checkbox" value="risk_car_fall_2" onchange="generateImage()"> 작업 전 지반상태 확인</label>
                   <label class="flex items-center gap-2"><input type="checkbox" value="risk_car_fall_3" onchange="generateImage()"> 건설장비는 허용된 제원 내 운행</label>
@@ -493,7 +511,7 @@
                   <input type="checkbox" value="risk_electric" onchange="toggleChildrenVisible(this, 'risk_electric_group')" class="w-4 h-4 text-rose-600 mr-2.5">
               <span class="text-xs font-bold"><i class="fa-solid fa-bolt"></i> 감전</span>
                 </label>
-                <div class="checkbox-group risk_electric_group risk_group-wrapper p-3 bg-white space-y-2 text-xs">
+                <div class="checkbox-group risk_electric_group risk-group-wrapper p-3 bg-white space-y-2 text-xs">
               <label class="flex items-center gap-2"><input type="checkbox" value="risk_electric_1" onchange="generateImage()"> 작업 전 검전기로 누설전류 확인</label>
               <label class="flex items-center gap-2"><input type="checkbox" value="risk_electric_2" onchange="generateImage()"> 특고압 이격 확인</label>
               <label class="flex items-center gap-2"><input type="checkbox" value="risk_electric_3" onchange="generateImage()"> 노출형 변압기 휀스 내 접근금지</label>
@@ -505,7 +523,7 @@
                   <input type="checkbox" value="risk_drop" onchange="toggleChildrenVisible(this, 'risk_drop_group')" class="w-4 h-4 text-amber-600 mr-2.5">
                   <span class="text-xs font-bold"><i class="fa-solid fa-helmet-safety"></i> 낙하물 발생</span>
                 </label>
-                <div class="checkbox-group risk_drop_group risk_group-wrapper p-3 bg-white space-y-2 text-xs">
+                <div class="checkbox-group risk_drop_group risk-group-wrapper p-3 bg-white space-y-2 text-xs">
                   <label class="flex items-center gap-2"><input type="checkbox" value="risk_drop_1" onchange="generateImage()"> 작업반경 내 또는 상부작업 시 직하단 접근금지</label>
                   <label class="flex items-center gap-2"><input type="checkbox" value="risk_drop_2" onchange="generateImage()"> 승인된 인양도구 사용(슬링벨트, 와이어 등)</label>
                   <label class="flex items-center gap-2"><input type="checkbox" value="risk_drop_3" onchange="generateImage()"> 낙하물 방지망/삼각틀/도르래 등 설치</label>
@@ -518,7 +536,7 @@
                   <input type="checkbox" value="risk_boom" onchange="toggleChildrenVisible(this, 'risk_boom_group')" class="w-4 h-4 text-rose-600 mr-2.5">
                   <span class="text-xs font-bold"><i class="fa-solid fa-fire-flame-curved"></i> 화재, 폭발</span>
                 </label>
-                <div class="checkbox-group risk_boom_group risk_group-wrapper p-3 bg-white space-y-2 text-xs">
+                <div class="checkbox-group risk_boom_group risk-group-wrapper p-3 bg-white space-y-2 text-xs">
                   <label class="flex items-center gap-2"><input type="checkbox" value="risk_boom_1" onchange="generateImage()"> 인화물 제거, 소화기 비치</label>
                   <label class="flex items-center gap-2"><input type="checkbox" value="risk_boom_2" onchange="generateImage()"> 불티 발생 작업 시 불티비산방지포 사용</label>
                   <label class="flex items-center gap-2"><input type="checkbox" value="risk_boom_3" onchange="generateImage()"> 작업 중 흡연 금지</label>
@@ -537,8 +555,9 @@
               </div>
             </div>
           </div>
-          <div class="text-center text-xs text-slate-400 font-bold pb-2 pt-6 swipe-hint-anim">
-            <i class="fa-solid fa-arrow-left mr-0.5"></i> 밀어서 이동 <i class="fa-solid fa-arrow-right ml-0.5"></i>
+          <div class="flex justify-between pb-2 pt-6">
+            <button type="button" onclick="goToStep(2)" class="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl text-sm shadow-sm transition hover:bg-slate-300 cursor-pointer"><i class="fa-solid fa-arrow-left mr-1"></i> 이전</button>
+            <button type="button" onclick="goToStep(4)" class="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-sm shadow-md transition hover:bg-indigo-700 cursor-pointer">다음 <i class="fa-solid fa-arrow-right ml-1"></i></button>
           </div>
         </section>
 
@@ -578,8 +597,8 @@
                 <span>첫 페이지(STEP 1)로 돌아가서 항목 재검토하기</span>
             </button>
           </div>
-          <div class="text-center text-xs text-slate-400 font-bold pb-2 pt-6 swipe-hint-anim">
-            <i class="fa-solid fa-arrow-left mr-0.5"></i>  항목 교정 수정
+          <div class="flex justify-start pb-2 pt-6">
+            <button type="button" onclick="goToStep(3)" class="px-5 py-2.5 bg-slate-200 text-slate-700 font-bold rounded-xl text-sm shadow-sm transition hover:bg-slate-300 cursor-pointer"><i class="fa-solid fa-arrow-left mr-1"></i> 이전</button>
           </div>
         </section>
 
@@ -609,9 +628,6 @@
     // 전역 스와이프 상태 머신 로직 변수들
     let currentStep = 0;
     const totalSteps = 5;
-    let startX = 0;
-    let currentX = 0;
-    let isSwiping = false;
 
     const swiperWrapper = document.getElementById('swiper-wrapper');
     const stepDots = document.querySelectorAll('.step-dot');
@@ -641,33 +657,6 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // 첫번째 변경사항 요건: 넘기는 방식을 좌우 제스처 터치 판정 스와이프로 교체 (임계값 70px)
-    window.addEventListener('touchstart', (e) => {
-      startX = e.touches[0].clientX;
-      isSwiping = true;
-    }, {passive: true});
-
-    window.addEventListener('touchmove', (e) => {
-      if (!isSwiping) return;
-      currentX = e.touches[0].clientX;
-    }, {passive: true});
-
-    window.addEventListener('touchend', () => {
-      if (!isSwiping) return;
-      isSwiping = false;
-      const diffX = startX - currentX;
-
-      if (Math.abs(diffX) > 70 && currentX !== 0) {
-        if (diffX > 0 && currentStep < totalSteps - 1) {
-          currentStep++;
-        } else if (diffX < 0 && currentStep > 0) {
-          currentStep--;
-        }
-        updateSwiperPosition();
-      }
-      currentX = 0;
-    });
-
     // 문제점 2 반영 요건: 상단부 1/2/3/4/5 서클 숫자 터치 클릭 시 즉각 이동 기능 구현체
     function goToStep(stepIndex) {
       if(stepIndex >= 0 && stepIndex < totalSteps) {
@@ -689,6 +678,13 @@
           dot.className = "step-dot w-9 h-9 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center font-semibold text-sm transition-all duration-300 cursor-pointer";
         }
       });
+      
+      // 스텝 이동 시 화면 상단으로 스크롤 고정
+      const slides = document.querySelectorAll('.swiper-slide');
+      if (slides[currentStep]) {
+        slides[currentStep].scrollTop = 0;
+      }
+
       generateImage();
     }
 
@@ -766,7 +762,54 @@
         workList = JSON.parse(savedWorkList);
         filterWorkList();
       }
+        loadCheckboxGroups();
       generateImage();
+    }
+
+    // 체크박스 그룹 일괄 저장 기능 추가
+    function saveCheckboxGroup(groupId) {
+      const container = document.getElementById(groupId);
+      if (!container) return;
+      const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+      const data = {};
+      checkboxes.forEach(cb => { data[cb.value] = cb.checked; });
+      
+      const texts = container.querySelectorAll('input[type="text"]');
+      texts.forEach(txt => { data[txt.id] = txt.value; });
+
+      localStorage.setItem('risk_save_' + groupId, JSON.stringify(data));
+      alert("해당 그룹 항목들이 기기에 안전하게 저장되었습니다.");
+    }
+
+    function loadCheckboxGroups() {
+      const groups = ['group_weather', 'group_machine', 'group_site_char', 'group_common', 'group_season', 'group_precheck'];
+      groups.forEach(groupId => {
+        const saved = localStorage.getItem('risk_save_' + groupId);
+        if (saved) {
+          const data = JSON.parse(saved);
+          const container = document.getElementById(groupId);
+          if (container) {
+            const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(cb => {
+              if (data[cb.value] !== undefined) {
+                cb.checked = data[cb.value];
+                if (cb.id && cb.id.includes('_cb')) {
+                  let wrapId = cb.id.replace('_cb', '_wrap');
+                  wrapId = wrapId.replace('_ect_wrap', '_etc_wrap');
+                  const wrap = document.getElementById(wrapId);
+                  if (wrap) wrap.style.display = cb.checked ? 'block' : 'none';
+                }
+              }
+            });
+            const texts = container.querySelectorAll('input[type="text"]');
+            texts.forEach(txt => {
+              if (data[txt.id] !== undefined) {
+                txt.value = data[txt.id];
+              }
+            });
+          }
+        }
+      });
     }
 
     function dfs_xy_conv(v1, v2) {
