@@ -1,4 +1,4 @@
-const CACHE_NAME = 'risk-assessment-v10';
+const CACHE_NAME = 'risk-assessment-v11';
 const urlsToCache = [
   './',
   './index.html',
