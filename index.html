@@ -145,7 +145,7 @@
               </button>
               <div class="grid grid-cols-2 gap-3">
                 <div class="bg-slate-50 p-2.5 rounded-lg text-center border border-slate-100">
-                  <span class="block text-[11px] font-bold text-slate-400 mb-0.5">실황 온도</span>
+                  <span class="block text-[11px] font-bold text-slate-400 mb-0.5">온도</span>
                   <input type="text" id="real_temperature" placeholder="연동 대기" oninput="generateImage()" class="w-full text-center bg-transparent border-none font-extrabold text-sm text-slate-800 focus:outline-none">
                 </div>
                 <div class="bg-slate-50 p-2.5 rounded-lg text-center border border-slate-100">
@@ -154,6 +154,23 @@
                 </div>
               </div>
             </div>
+
+            <div class="mt-4 bg-white border border-slate-100 p-4 rounded-xl shadow-sm space-y-3">
+              <label class="block text-xs font-bold text-slate-700">현재 온도 [기상청]</label>
+              
+              <div class="grid grid-cols-3 gap-2 text-center text-xs font-bold">
+                <div id="status-good" class="p-2 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/60 opacity-30 transition-all duration-300">🔵 양호🌡</div>
+                <div id="status-care" class="p-2 rounded-lg bg-green-50 text-green-700 border border-green-200/60 opacity-30 transition-all duration-300">🟢 관심[31℃⬆]</div>
+                <div id="status-warn" class="p-2 rounded-lg bg-amber-50 text-amber-700 border border-amber-200/60 opacity-30 transition-all duration-300">🟡 주의[33℃⬆]</div>
+                <div id="status-danger" class="p-2 rounded-lg bg-orange-50 text-orange-700 border border-orange-200/60 opacity-30 transition-all duration-300">🟠 경고[35℃⬆]</div>
+                <div id="status-severe" class="p-2 rounded-lg bg-red-50 text-red-700 border border-red-200/60 opacity-30 transition-all duration-300">🔴 위험[38℃⬆]</div>
+                <div id="status-cold" class="p-2 rounded-lg bg-blue-50 text-blue-700 border border-blue-200/60 opacity-30 transition-all duration-300">❄️ 한파[-12℃⬇]</div>
+              </div>
+
+        <div id="status-message-box" class="hidden p-3 bg-slate-50 border border-slate-100 rounded-lg text-xs text-slate-600 font-medium leading-relaxed whitespace-pre-line">
+          온도 자동 불러오기 시 안내 멘트가 표시됩니다.
+        </div>
+      </div>            
 
             <div class="bg-white border border-slate-100 p-3.5 rounded-xl shadow-sm">
               <div class="flex justify-between items-center mb-2">
@@ -894,7 +911,7 @@
             
             // 필수 유지 사항 3번 연동: 수급 성공 시 종합 정보를 얼럿 모달로 디스플레이 처리
 // 💡 여기서부터 새로 작성된 체감온도 등급별 안내 로직입니다.
-            let alertMessage = `☀️ 기상청 단기 기상정보 호출 완료.\n📍 현지 위치: ${addressName || "동기화 완료"}\n🌡 실황 온도: ${T.toFixed(1)}°C\n💧 대기 습도: ${RH}%\n🌀 체감 온도: ${feelTemp.toFixed(1)}°C\n\n`;
+            let alertMessage = `☀️ 기상청 단기 기상정보 호출 완료.\n📍 현재 위치: ${addressName || "동기화 완료"}\n🌡  온도: ${T.toFixed(1)}°C\n💧 대기 습도: ${RH}%\n🌀 체감 온도: ${feelTemp.toFixed(1)}°C\n\n`;
             let safetyGuide = "";
             let specialReport = "";
 
@@ -919,9 +936,9 @@
             } else if (feelTemp >= 31) {
               safetyGuide = "🟢 [관심] 더위가 시작되는 단계입니다!\n- 현장 근처에 시원한 식수를 상시 비치하세요.\n- 작업자의 건강 상태를 수시로 살피세요.";
             } else if (T <= -12) {
-              safetyGuide = "🔵 [한파 안전] 혹한기 야외 작업 주의!\n- 동상 예방을 위해 방한 장갑, 방한모 등 보호구를 철저히 착용하세요.\n- 따뜻한 음료를 주기적으로 섭취하고 작업자 간 건강 상태를 점검하세요.";
+              safetyGuide = "❄️ [한파] 혹한기 야외 작업 주의!\n- 동상 예방을 위해 방한 장갑, 방한모 등 보호구를 철저히 착용하세요.\n- 따뜻한 음료를 주기적으로 섭취하고 작업자 간 건강 상태를 점검하세요.";
             } else {
-              safetyGuide = "✨ 현재 기상 조건은 양호한 편입니다.\n- 규칙적인 휴식과 기본적인 현장 안전 수칙을 준수하며 작업해 주세요.";
+              safetyGuide = "🔵 현재 기상 조건은 양호한 편입니다.\n- 위험성평가를 시행하여 기본적인 현장 안전 수칙을 준수하며 규칙적인 휴식을 취하면서 작업해 주세요.";
             }
 
             if (specialReport) {
@@ -929,9 +946,48 @@
             }
             alertMessage += safetyGuide;
 
-            // 최종 통합 알림창 표시
+            // 1. 기존 알림창 표시
             alert(alertMessage);
             
+            // ================= [💡 신규 추가: STEP 2 화면 제어 로직] =================
+            // 모든 배지의 ID 배열 및 초기화 (전부 흐리게 opacity-30 처리 및 scale 원복)
+            const statusIds = ['status-good', 'status-care', 'status-warn', 'status-danger', 'status-severe', 'status-cold'];
+            statusIds.forEach(id => {
+              const el = document.getElementById(id);
+              if (el) {
+                el.classList.add('opacity-30');
+                el.classList.remove('opacity-100', 'scale-105', 'ring-2', 'ring-offset-1');
+                // 한파/위험 등 단계별 고유 링(테두리 강조) 색상 제거를 위한 청소
+                el.classList.remove('ring-emerald-400', 'ring-green-400', 'ring-amber-400', 'ring-orange-400', 'ring-red-400', 'ring-blue-400');
+              }
+            });
+
+            // 현재 상태에 해당하는 ID와 강조 컬러 매칭
+            let activeId = "status-good";
+            let ringColor = "ring-emerald-400";
+
+            if (feelTemp >= 38) { activeId = "status-severe"; ringColor = "ring-red-400"; }
+            else if (feelTemp >= 35) { activeId = "status-danger"; ringColor = "ring-orange-400"; }
+            else if (feelTemp >= 33) { activeId = "status-warn"; ringColor = "ring-amber-400"; }
+            else if (feelTemp >= 31) { activeId = "status-care"; ringColor = "ring-green-400"; }
+            else if (T <= -12) { activeId = "status-cold"; ringColor = "ring-blue-400"; }
+
+            // 대상 항목 활성화 및 시각적 강조 효과 부여
+            const activeEl = document.getElementById(activeId);
+            if (activeEl) {
+              activeEl.classList.remove('opacity-30');
+              activeEl.classList.add('opacity-100', 'scale-105', 'ring-2', 'ring-offset-1', ringColor);
+            }
+
+            // 하단 안내 메시지 박스 채우고 노출시키기
+            const msgBox = document.getElementById("status-message-box");
+            if (msgBox) {
+              // 앞에서 계산된 가이드 문구(safetyGuide)에서 타이틀용 이모지를 떼고 메시지만 깔끔하게 표기
+              msgBox.innerText = safetyGuide;
+              msgBox.classList.remove('hidden');
+            }
+            // =========================================================================
+
             // 기존 기능 유지
             generateImage();
           }
