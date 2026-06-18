@@ -893,7 +893,46 @@
             document.getElementById("fake_temperature").value = feelTemp.toFixed(1) + "°C";
             
             // 필수 유지 사항 3번 연동: 수급 성공 시 종합 정보를 얼럿 모달로 디스플레이 처리
-            alert(`기상청 단기 기상정보 호출 완료.\n📍 현지 위치: ${addressName || "동기화 완료"}\n🌡 실황 온도: ${T.toFixed(1)}°C\n💧 대기 습도: ${RH}%\n🌀 체감 온도: ${feelTemp.toFixed(1)}°C`);
+// 💡 여기서부터 새로 작성된 체감온도 등급별 안내 로직입니다.
+            let alertMessage = `☀️ 기상청 단기 기상정보 호출 완료.\n📍 현지 위치: ${addressName || "동기화 완료"}\n🌡 실황 온도: ${T.toFixed(1)}°C\n💧 대기 습도: ${RH}%\n🌀 체감 온도: ${feelTemp.toFixed(1)}°C\n\n`;
+            let safetyGuide = "";
+            let specialReport = "";
+
+            // 1. 기상청 특보 기준 판단 (폭염/한파)
+            if (feelTemp >= 35) {
+              specialReport = "🚨 [기상청 기준: 폭염경보 수준]\n";
+            } else if (feelTemp >= 33) {
+              specialReport = "⚠️ [기상청 기준: 폭염주의보 수준]\n";
+            } else if (T <= -15) {
+              specialReport = "❄️ [기상청 기준: 한파경보 수준]\n";
+            } else if (T <= -12) {
+              specialReport = "🥶 [기상청 기준: 한파주의보 수준]\n";
+            }
+
+            // 2. 체감온도 4단계 기준 및 맞춤형 안전 안내 멘트
+            if (feelTemp >= 38) {
+              safetyGuide = "🔴 [위험] 극심한 무더위 단계입니다!\n- 야외 작업을 즉시 중단하고 시원한 곳으로 대피하세요.\n- 열사병 발생 위험이 매우 높으므로 상호 건강상태를 강제로 확인하세요.";
+            } else if (feelTemp >= 35) {
+              safetyGuide = "🟠 [경고] 매우 무더운 단계입니다!\n- 오후 시간대(14~17시) 옥외작업을 제한하고 휴식시간을 가지세요.\n- 시원한 물과 염분을 충분히 섭취하시기 바랍니다.";
+            } else if (feelTemp >= 33) {
+              safetyGuide = "🟡 [주의] 무더위가 심한 단계입니다!\n- 매 시간당 10~15분씩 그늘에서 정기적인 휴식을 취하세요.\n- 몸에 이상을 느끼면 즉시 관리자에게 보고하고 작업을 중지하세요.";
+            } else if (feelTemp >= 31) {
+              safetyGuide = "🟢 [관심] 더위가 시작되는 단계입니다!\n- 현장 근처에 시원한 식수를 상시 비치하세요.\n- 작업자의 건강 상태를 수시로 살피세요.";
+            } else if (T <= -12) {
+              safetyGuide = "🔵 [한파 안전] 혹한기 야외 작업 주의!\n- 동상 예방을 위해 방한 장갑, 방한모 등 보호구를 철저히 착용하세요.\n- 따뜻한 음료를 주기적으로 섭취하고 작업자 간 건강 상태를 점검하세요.";
+            } else {
+              safetyGuide = "✨ 현재 기상 조건은 양호한 편입니다.\n- 규칙적인 휴식과 기본적인 현장 안전 수칙을 준수하며 작업해 주세요.";
+            }
+
+            if (specialReport) {
+              alertMessage += specialReport + "\n";
+            }
+            alertMessage += safetyGuide;
+
+            // 최종 통합 알림창 표시
+            alert(alertMessage);
+            
+            // 기존 기능 유지
             generateImage();
           }
         } catch (error) {
