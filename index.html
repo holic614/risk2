@@ -156,8 +156,13 @@
             </div>
 
             <div class="mt-4 bg-white border border-slate-100 p-4 rounded-xl shadow-sm space-y-3">
-              <label class="block text-xs font-bold text-slate-700">현재 온도 [기상청]</label>
-              
+              <div class="flex flex-wrap justify-between items-center border-b border-slate-50 pb-2 mb-1">
+                <label class="text-xs font-bold text-slate-700">현재 온도 [기상청]</label>
+                <div id="weather-full-status" class="text-xs font-medium text-slate-500">
+                  기상특보 : <span class="ml-1 px-2.5 py-1 rounded-md font-extrabold bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs">데이터 로딩 중</span>
+                </div>
+              </div>              
+
               <div class="grid grid-cols-3 gap-2 text-center text-xs font-bold">
                 <div id="status-good" class="p-2 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/60 opacity-30 transition-all duration-300">🔵 양호🌡</div>
                 <div id="status-care" class="p-2 rounded-lg bg-green-50 text-green-700 border border-green-200/60 opacity-30 transition-all duration-300">🟢 관심[31℃⬆]</div>
@@ -850,8 +855,8 @@
       return rs;
     }
 
-    // 필수 유지 기능 3 : 기온/체감온도 호출 및 원본 성공 알림창 정보 디스플레이 100% 보존
-    async function fetchWeather(btn) {
+// 필수 유지 기능 3 : 기온/체감온도 호출 및 원본 성공 알림창 정보 디스플레이 100% 보존
+async function fetchWeather(btn) {
       if (!navigator.geolocation) {
         alert("GPS 위치 정보 권한 획득이 불가한 브라우저 환경입니다.");
         return;
@@ -863,6 +868,8 @@
         const lat = position.coords.latitude;
         const lon = position.coords.longitude;
         let addressName = "";
+        let currentGu = ""; 
+        
         try {
           const addrRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1`, {
             headers: { 'Accept-Language': 'ko' }
@@ -873,20 +880,61 @@
             const gu = addrData.address.borough || addrData.address.city_district || addrData.address.county || "";
             const dong = addrData.address.suburb || addrData.address.neighbourhood || addrData.address.quarter || "";
             addressName = `${city} ${gu} ${dong}`.replace(/\s+/g, " ").trim();
+            currentGu = gu || city; 
             const locInput = document.getElementById("location");
             if(locInput && !locInput.value) locInput.value = addressName;
           }
         } catch (e) { console.error(e); }
 
         const grid = dfs_xy_conv(lat, lon);
-        const base_date = new Date().getFullYear() + String(new Date().getMonth() + 1).padStart(2, '0') + String(new Date().getDate()).padStart(2, '0');
-        const base_time = String(new Date().getHours() - 1).padStart(2, '0') + '00';
+        const nowObj = new Date();
+        const base_date = nowObj.getFullYear() + String(nowObj.getMonth() + 1).padStart(2, '0') + String(nowObj.getDate()).padStart(2, '0');
+        const base_time = String(nowObj.getHours() - 1).padStart(2, '0') + '00';
+        
+        // 💡 분 단위까지 포함하는 포맷용 시간 변수 생성 (예: "14시30분")
+        const currentHourMinText = String(nowObj.getHours()).padStart(2, '0') + "시" + String(nowObj.getMinutes()).padStart(2, '0') + "분";
+        
         const serviceKey = "32hx6v6b6YOkxCDbGAZv1sVAmobH2HCcPvhz9Jd88b0z1ee7nKtKJE1MTOj3gOwzp9LD8HhILa0cCjvMj5X9rQ%3D%3D";
         const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${serviceKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${base_date}&base_time=${base_time}&nx=${grid.x}&ny=${grid.y}`;
+        
+        // 기상특보조회서비스 API URL
+        const specialReportUrl = `https://apis.data.go.kr/1360000/WthrWrngInfoService/getCcwAnfc?serviceKey=${serviceKey}&pageNo=1&numOfRows=20&dataType=JSON`;
 
         try {
           const response = await fetch(url);
           const data = await response.json();
+          
+          // 💡 기상특보 데이터 수집 및 분석 시작
+          let activeSpecialReport = "특보 없음";
+          let rawReportName = ""; // 알림창 및 멘트용 변수 (예: 폭염주의보)
+          
+          try {
+            const spResponse = await fetch(specialReportUrl);
+            const spData = await spResponse.json();
+            if (spData?.response?.header?.resultCode === "00") {
+              const spItems = spData.response.body.items.item;
+              if (spItems && spItems.length > 0) {
+                for (let item of spItems) {
+                  const content = item.content || "";
+                  const title = item.title || "";
+                  
+                  if (currentGu && (content.includes(currentGu) || title.includes(currentGu))) {
+                    if (content.includes("폭염경보")) { rawReportName = "폭염경보"; activeSpecialReport = "폭염경보 발령"; }
+                    else if (content.includes("폭염주의보")) { rawReportName = "폭염주의보"; activeSpecialReport = "폭염주의보 발령"; }
+                    else if (content.includes("한파경보")) { rawReportName = "한파경보"; activeSpecialReport = "한파경보 발령"; }
+                    else if (content.includes("한파주의보")) { rawReportName = "한파주의보"; activeSpecialReport = "한파주의보 발령"; }
+                    else if (content.includes("호우경보")) { rawReportName = "호우경보"; activeSpecialReport = "호우경보 발령"; }
+                    else if (content.includes("호우주의보")) { rawReportName = "호우주의보"; activeSpecialReport = "호우주의보 발령"; }
+                    else if (content.includes("강풍경보")) { rawReportName = "강풍경보"; activeSpecialReport = "강풍경보 발령"; }
+                    else if (content.includes("강풍주의보")) { rawReportName = "강풍주의보"; activeSpecialReport = "강풍주의보 발령"; }
+                    
+                    if (activeSpecialReport !== "특보 없음") break;
+                  }
+                }
+              }
+            }
+          } catch (spErr) { console.error("특보 데이터 파싱 에러:", spErr); }
+
           if (data?.response?.header?.resultCode === "00") {
             const items = data.response.body.items.item;
             const t1h = items.find(i => i.category === "T1H").obsrValue;
@@ -909,89 +957,80 @@
             document.getElementById("real_temperature").value = T.toFixed(1) + "°C";
             document.getElementById("fake_temperature").value = feelTemp.toFixed(1) + "°C";
             
-            // 필수 유지 사항 3번 연동: 수급 성공 시 종합 정보를 얼럿 모달로 디스플레이 처리
-// 💡 여기서부터 새로 작성된 체감온도 등급별 안내 로직입니다.
-            let alertMessage = `☀️ 기상청 단기 기상정보 호출 완료.\n📍 현재 위치: ${addressName || "동기화 완료"}\n🌡  온도: ${T.toFixed(1)}°C\n💧 대기 습도: ${RH}%\n🌀 체감 온도: ${feelTemp.toFixed(1)}°C\n\n`;
-            let safetyGuide = "";
-            let specialReport = "";
-
-            // 1. 기상청 특보 기준 판단 (폭염/한파)
-            if (feelTemp >= 35) {
-              specialReport = "🚨 [기상청 기준: 폭염경보 수준]\n";
-            } else if (feelTemp >= 33) {
-              specialReport = "⚠️ [기상청 기준: 폭염주의보 수준]\n";
-            } else if (T <= -15) {
-              specialReport = "❄️ [기상청 기준: 한파경보 수준]\n";
-            } else if (T <= -12) {
-              specialReport = "🥶 [기상청 기준: 한파주의보 수준]\n";
+            // ================= [💡 UI/디자인 요구사항 반영] =================
+            const statusLabelTarget = document.getElementById("weather-full-status");
+            if (statusLabelTarget) {
+              if (activeSpecialReport !== "특보 없음" && rawReportName) {
+                // 🚨 특보가 발령 중일 때: 붉은색 그라데이션 배지와 테두리, 반짝이는(animate-pulse) 효과로 초강력 강조
+                statusLabelTarget.innerHTML = `
+                  <span class="text-slate-700 font-semibold">기상특보 :</span> 
+                  <span class="ml-1 inline-block px-2.5 py-1 text-[13px] font-black text-rose-700 bg-rose-50 border border-rose-300 rounded-md shadow-sm animate-pulse">
+                    [ ${rawReportName} 발령 ]
+                  </span>
+                `;
+              } else {
+                // ✅ 특보가 없을 때: 깔끔하고 차분한 회색/블루 톤 배지 처리
+                statusLabelTarget.innerHTML = `
+                  <span class="text-slate-500">기상특보 :</span> 
+                  <span class="ml-1 inline-block px-2.5 py-1 text-[12px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-md">
+                    [ 특보 없음 ]
+                  </span>
+                `;
+              }
             }
-
-            // 2. 체감온도 4단계 기준 및 맞춤형 안전 안내 멘트
-            if (feelTemp >= 38) {
-              safetyGuide = "🔴 [위험] 극심한 무더위 단계입니다!\n- 야외 작업을 즉시 중단하고 시원한 곳으로 대피하세요.\n- 열사병 발생 위험이 매우 높으므로 상호 건강상태를 강제로 확인하세요.";
-            } else if (feelTemp >= 35) {
-              safetyGuide = "🟠 [경고] 매우 무더운 단계입니다!\n- 오후 시간대(14~17시) 옥외작업을 제한하고 휴식시간을 가지세요.\n- 시원한 물과 염분을 충분히 섭취하시기 바랍니다.";
-            } else if (feelTemp >= 33) {
-              safetyGuide = "🟡 [주의] 무더위가 심한 단계입니다!\n- 매 시간당 10~15분씩 그늘에서 정기적인 휴식을 취하세요.\n- 몸에 이상을 느끼면 즉시 관리자에게 보고하고 작업을 중지하세요.";
-            } else if (feelTemp >= 31) {
-              safetyGuide = "🟢 [관심] 더위가 시작되는 단계입니다!\n- 현장 근처에 시원한 식수를 상시 비치하세요.\n- 작업자의 건강 상태를 수시로 살피세요.";
-            } else if (T <= -12) {
-              safetyGuide = "❄️ [한파] 혹한기 야외 작업 주의!\n- 동상 예방을 위해 방한 장갑, 방한모 등 보호구를 철저히 착용하세요.\n- 따뜻한 음료를 주기적으로 섭취하고 작업자 간 건강 상태를 점검하세요.";
-            } else if (month >= 5 && month <= 9 && feelTemp >= 29 && feelTemp < 31) {
-              // 💡 [추가] 여름철 양호 구간 중 29도~31도 미만일 때 나가는 관심 단계 근접 멘트
-              safetyGuide = "🔵 [양호] 현재 '양호' 단계이나 체감온도가 상승 중입니다!\n- 관심 단계(31℃)에 근접하고 있으니, 현장 작업자는 무더위에 대비하여 시원한 식수를 준비하고 컨디션을 조절해 주세요.";
+            // =========================================================================       
+            // 💡 [요구사항 반영] 최고 최우선 조건: 특보가 발효 중(발령)일 때의 우선 안내 멘트 처리
+            if (activeSpecialReport !== "특보 없음") {
+              safetyGuide = `📢 [특보] 현재 해당 지역에 [${rawReportName}] 발령 중으로 규칙적인 휴식과 안전 수칙을 준수하여 작업해 주세요.`;
             } else {
-              safetyGuide = "🔵 [양호] 현재 기상 조건은 양호한 편입니다.\n- 위험성평가를 시행하여 기본적인 현장 안전 수칙을 준수하며 규칙적인 휴식을 취하면서 작업해 주세요.";
+              // 특보가 없을 때만 기존 체감온도별 안내 멘트 작동
+              if (feelTemp >= 38) {
+                safetyGuide = "🔴 [위험] 극심한 무더위 단계입니다!\n- 야외 작업을 즉시 중단하고 시원한 곳으로 대피하세요.\n- 열사병 발생 위험이 매우 높으므로 상호 건강상태를 강제로 확인하세요.";
+              } else if (feelTemp >= 35) {
+                safetyGuide = "🟠 [경고] 매우 무더운 단계입니다!\n- 오후 시간대(14~17시) 옥외작업을 제한하고 휴식시간을 가지세요.\n- 시원한 물 and 염분을 충분히 섭취하시기 바랍니다.";
+              } else if (feelTemp >= 33) {
+                safetyGuide = "🟡 [주의] 무더위가 심한 단계입니다!\n- 매 시간당 10~15분씩 그늘에서 정기적인 휴식을 취하세요.\n- 몸에 이상을 느끼면 즉시 관리자에게 보고하고 작업을 중지하세요.";
+              } else if (feelTemp >= 31) {
+                safetyGuide = "🟢 [관심] 더위가 시작되는 단계입니다!\n- 현장 근처에 시원한 식수를 상시 비치하세요.\n- 작업자의 건강 상태를 수시로 살피세요.";
+              } else if (T <= -12) {
+                safetyGuide = "❄️ [한파] 혹한기 야외 작업 주의!\n- 동상 예방을 위해 방한 장갑, 방한모 등 보호구를 철저히 착용하세요.\n- 따뜻한 음료를 주기적으로 섭취하고 작업자 간 건강 상태를 점검하세요.";
+              } else if (month >= 5 && month <= 9 && feelTemp >= 29 && feelTemp < 31) {
+                safetyGuide = "🔵 [양호] 현재 '양호' 단계이나 체감온도가 상승 중입니다!\n- 관심 단계(31℃)에 근접하고 있으니, 현장 작업자는 무더위에 대비하여 시원한 식수를 준비하고 컨디션을 조절해 주세요.";
+              } else {
+                safetyGuide = "🔵 [양호] 현재 기상 조건은 양호한 편입니다.\n- 규칙적인 휴식과 기본적인 현장 안전 수칙을 준수하며 작업해 주세요.";
+              }
             }
 
-            if (specialReport) {
-              alertMessage += specialReport + "\n";
-            }
-            alertMessage += safetyGuide;
-
-            // 1. 기존 알림창 표시
+            // 알림창(Alert) 메시지 조립 및 팝업 출력 (지저분한 따옴표 제거)
+            const displayReportText = (activeSpecialReport !== "특보 없음") ? `🚨 기상특보: [${rawReportName} 발령]` : "✅ 기상특보: [특보 없음]";
+            let alertMessage = `☀️ 기상청 실시간 정보 연동 결과\n📍 현재 위치: ${addressName || "확인 완료"}\n🌡  실제 기온: ${T.toFixed(1)}°C | 체감 온도: ${feelTemp.toFixed(1)}°C\n📋 상황 안내: ${displayReportText}\n\n${safetyGuide}`;
             alert(alertMessage);
             
-            // ================= [💡 신규 추가: STEP 2 화면 제어 로직] =================
-            // 모든 배지의 ID 배열 및 초기화 (전부 흐리게 opacity-30 처리 및 scale 원복)
+            // 하단 대시보드 배지 활성화 처리
             const statusIds = ['status-good', 'status-care', 'status-warn', 'status-danger', 'status-severe', 'status-cold'];
             statusIds.forEach(id => {
               const el = document.getElementById(id);
               if (el) {
                 el.classList.add('opacity-30');
-                el.classList.remove('opacity-100', 'scale-105', 'ring-2', 'ring-offset-1');
-                // 한파/위험 등 단계별 고유 링(테두리 강조) 색상 제거를 위한 청소
-                el.classList.remove('ring-emerald-400', 'ring-green-400', 'ring-amber-400', 'ring-orange-400', 'ring-red-400', 'ring-blue-400');
+                el.classList.remove('opacity-100', 'scale-105', 'ring-2', 'ring-offset-1', 'ring-emerald-400', 'ring-green-400', 'ring-amber-400', 'ring-orange-400', 'ring-red-400', 'ring-blue-400');
               }
             });
 
-            // 현재 상태에 해당하는 ID와 강조 컬러 매칭
-            let activeId = "status-good";
-            let ringColor = "ring-emerald-400";
-
-            if (feelTemp >= 38) { activeId = "status-severe"; ringColor = "ring-red-400"; }
-            else if (feelTemp >= 35) { activeId = "status-danger"; ringColor = "ring-orange-400"; }
+            // 특보가 떴을 때도 가시적으로 배지 하이라이팅 연동 유도
+            let activeId = "status-good"; let ringColor = "ring-emerald-400";
+            if (activeSpecialReport.includes("폭염경보") || feelTemp >= 38) { activeId = "status-severe"; ringColor = "ring-red-400"; }
+            else if (activeSpecialReport.includes("폭염주의보") || feelTemp >= 35) { activeId = "status-danger"; ringColor = "ring-orange-400"; }
             else if (feelTemp >= 33) { activeId = "status-warn"; ringColor = "ring-amber-400"; }
             else if (feelTemp >= 31) { activeId = "status-care"; ringColor = "ring-green-400"; }
             else if (T <= -12) { activeId = "status-cold"; ringColor = "ring-blue-400"; }
 
-            // 대상 항목 활성화 및 시각적 강조 효과 부여
             const activeEl = document.getElementById(activeId);
-            if (activeEl) {
-              activeEl.classList.remove('opacity-30');
-              activeEl.classList.add('opacity-100', 'scale-105', 'ring-2', 'ring-offset-1', ringColor);
-            }
+            if (activeEl) { activeEl.classList.remove('opacity-30'); activeEl.classList.add('opacity-100', 'scale-105', 'ring-2', 'ring-offset-1', ringColor); }
 
-            // 하단 안내 메시지 박스 채우고 노출시키기
+            // 화면 하단 안전 가이드 텍스트 박스 업데이트
             const msgBox = document.getElementById("status-message-box");
-            if (msgBox) {
-              // 앞에서 계산된 가이드 문구(safetyGuide)에서 타이틀용 이모지를 떼고 메시지만 깔끔하게 표기
-              msgBox.innerText = safetyGuide;
-              msgBox.classList.remove('hidden');
-            }
-            // =========================================================================
+            if (msgBox) { msgBox.innerText = safetyGuide; msgBox.classList.remove('hidden'); }
 
-            // 기존 기능 유지
             generateImage();
           }
         } catch (error) {
