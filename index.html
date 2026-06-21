@@ -159,7 +159,7 @@
               <div class="flex flex-wrap justify-between items-center border-b border-slate-50 pb-2 mb-1">
                 <label class="text-xs font-bold text-slate-700">현재 온도 [기상청]</label>
                 <div id="weather-full-status" class="text-xs font-medium text-slate-500">
-                  기상특보 : <span class="ml-1 px-2.5 py-1 rounded-md font-extrabold bg-slate-100 text-slate-600 border border-slate-200 shadow-2xs">데이터 로딩 중</span>
+                  기상특보 : <span class="ml-1 inline-block px-2.5 py-1 text-[12px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-md">데이터 로딩 중</span>
                 </div>
               </div>              
 
@@ -856,7 +856,7 @@
     }
 
 // 필수 유지 기능 3 : 기온/체감온도 호출 및 원본 성공 알림창 정보 디스플레이 100% 보존
-async function fetchWeather(btn) {
+    async function fetchWeather(btn) {
       if (!navigator.geolocation) {
         alert("GPS 위치 정보 권한 획득이 불가한 브라우저 환경입니다.");
         return;
@@ -887,13 +887,21 @@ async function fetchWeather(btn) {
         } catch (e) { console.error(e); }
 
         const grid = dfs_xy_conv(lat, lon);
+        // 💡 기상청 초단기실황 최신 발표시각 계산
         const nowObj = new Date();
-        const base_date = nowObj.getFullYear() + String(nowObj.getMonth() + 1).padStart(2, '0') + String(nowObj.getDate()).padStart(2, '0');
-        const base_time = String(nowObj.getHours() - 1).padStart(2, '0') + '00';
-        
-        // 💡 분 단위까지 포함하는 포맷용 시간 변수 생성 (예: "14시30분")
-        const currentHourMinText = String(nowObj.getHours()).padStart(2, '0') + "시" + String(nowObj.getMinutes()).padStart(2, '0') + "분";
-        
+
+        // 매시 40분 이전이면 직전 시간 자료 사용
+        if (nowObj.getMinutes() < 40) {
+          nowObj.setHours(nowObj.getHours() - 1);
+        }
+
+        const base_date =
+          nowObj.getFullYear() +
+          String(nowObj.getMonth() + 1).padStart(2, '0') +
+          String(nowObj.getDate()).padStart(2, '0');
+
+        const base_time =
+          String(nowObj.getHours()).padStart(2, '0') + '00';     
         const serviceKey = "32hx6v6b6YOkxCDbGAZv1sVAmobH2HCcPvhz9Jd88b0z1ee7nKtKJE1MTOj3gOwzp9LD8HhILa0cCjvMj5X9rQ%3D%3D";
         const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${serviceKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${base_date}&base_time=${base_time}&nx=${grid.x}&ny=${grid.y}`;
         
@@ -904,9 +912,8 @@ async function fetchWeather(btn) {
           const response = await fetch(url);
           const data = await response.json();
           
-          // 💡 기상특보 데이터 수집 및 분석 시작
           let activeSpecialReport = "특보 없음";
-          let rawReportName = ""; // 알림창 및 멘트용 변수 (예: 폭염주의보)
+          let rawReportName = ""; 
           
           try {
             const spResponse = await fetch(specialReportUrl);
@@ -957,11 +964,10 @@ async function fetchWeather(btn) {
             document.getElementById("real_temperature").value = T.toFixed(1) + "°C";
             document.getElementById("fake_temperature").value = feelTemp.toFixed(1) + "°C";
             
-            // ================= [💡 UI/디자인 요구사항 반영] =================
+            // UI 디자인 적용 영역
             const statusLabelTarget = document.getElementById("weather-full-status");
             if (statusLabelTarget) {
               if (activeSpecialReport !== "특보 없음" && rawReportName) {
-                // 🚨 특보가 발령 중일 때: 붉은색 그라데이션 배지와 테두리, 반짝이는(animate-pulse) 효과로 초강력 강조
                 statusLabelTarget.innerHTML = `
                   <span class="text-slate-700 font-semibold">기상특보 :</span> 
                   <span class="ml-1 inline-block px-2.5 py-1 text-[13px] font-black text-rose-700 bg-rose-50 border border-rose-300 rounded-md shadow-sm animate-pulse">
@@ -969,7 +975,6 @@ async function fetchWeather(btn) {
                   </span>
                 `;
               } else {
-                // ✅ 특보가 없을 때: 깔끔하고 차분한 회색/블루 톤 배지 처리
                 statusLabelTarget.innerHTML = `
                   <span class="text-slate-500">기상특보 :</span> 
                   <span class="ml-1 inline-block px-2.5 py-1 text-[12px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-md">
@@ -978,35 +983,39 @@ async function fetchWeather(btn) {
                 `;
               }
             }
-            // =========================================================================       
-            // 💡 [요구사항 반영] 최고 최우선 조건: 특보가 발효 중(발령)일 때의 우선 안내 멘트 처리
-            if (activeSpecialReport !== "특보 없음") {
-              safetyGuide = `📢 [특보] 현재 해당 지역에 [${rawReportName}] 발령 중으로 규칙적인 휴식과 안전 수칙을 준수하여 작업해 주세요.`;
+
+            // 1. 먼저 실시간 온도 기준에 맞춘 기본 멘트를 추출합니다.
+            let tempGuideText = "";
+            if (feelTemp >= 38) {
+              tempGuideText = "🔴 [위험] 극심한 무더위 단계입니다!\n- 야외 작업을 즉시 중단하고 시원한 곳으로 대피하세요.\n- 열사병 발생 위험이 매우 높으므로 상호 건강상태를 강제로 확인하세요.";
+            } else if (feelTemp >= 35) {
+              tempGuideText = "🟠 [경고] 매우 무더운 단계입니다!\n- 오후 시간대(14~17시) 옥외작업을 제한하고 휴식시간을 가지세요.\n- 시원한 물 and 염분을 충분히 섭취하시기 바랍니다.";
+            } else if (feelTemp >= 33) {
+              tempGuideText = "🟡 [주의] 무더위가 심한 단계입니다!\n- 매 시간당 10~15분씩 그늘에서 정기적인 휴식을 취하세요.\n- 몸에 이상을 느끼면 즉시 관리자에게 보고하고 작업을 중지하세요.";
+            } else if (feelTemp >= 31) {
+              tempGuideText = "🟢 [관심] 더위가 시작되는 단계입니다!\n- 현장 근처에 시원한 식수를 상시 비치하세요.\n- 작업자의 건강 상태를 수시로 살피세요.";
+            } else if (T <= -12) {
+              tempGuideText = "❄️ [한파] 혹한기 야외 작업 주의!\n- 동상 예방을 위해 방한 장갑, 방한모 등 보호구를 철저히 착용하세요.\n- 따뜻한 음료를 주기적으로 섭취하고 작업자 간 건강 상태를 점검하세요.";
+            } else if (month >= 5 && month <= 9 && feelTemp >= 29 && feelTemp < 31) {
+              tempGuideText = "🔵 [양호 ⬆] 현재 '양호' 단계이나 체감온도가 상승 중입니다!\n- 관심 단계(31℃)에 근접하고 있으니, 현장 작업자는 무더위에 대비하여 시원한 식수를 준비하고 컨디션을 조절해 주세요.";
             } else {
-              // 특보가 없을 때만 기존 체감온도별 안내 멘트 작동
-              if (feelTemp >= 38) {
-                safetyGuide = "🔴 [위험] 극심한 무더위 단계입니다!\n- 야외 작업을 즉시 중단하고 시원한 곳으로 대피하세요.\n- 열사병 발생 위험이 매우 높으므로 상호 건강상태를 강제로 확인하세요.";
-              } else if (feelTemp >= 35) {
-                safetyGuide = "🟠 [경고] 매우 무더운 단계입니다!\n- 오후 시간대(14~17시) 옥외작업을 제한하고 휴식시간을 가지세요.\n- 시원한 물 and 염분을 충분히 섭취하시기 바랍니다.";
-              } else if (feelTemp >= 33) {
-                safetyGuide = "🟡 [주의] 무더위가 심한 단계입니다!\n- 매 시간당 10~15분씩 그늘에서 정기적인 휴식을 취하세요.\n- 몸에 이상을 느끼면 즉시 관리자에게 보고하고 작업을 중지하세요.";
-              } else if (feelTemp >= 31) {
-                safetyGuide = "🟢 [관심] 더위가 시작되는 단계입니다!\n- 현장 근처에 시원한 식수를 상시 비치하세요.\n- 작업자의 건강 상태를 수시로 살피세요.";
-              } else if (T <= -12) {
-                safetyGuide = "❄️ [한파] 혹한기 야외 작업 주의!\n- 동상 예방을 위해 방한 장갑, 방한모 등 보호구를 철저히 착용하세요.\n- 따뜻한 음료를 주기적으로 섭취하고 작업자 간 건강 상태를 점검하세요.";
-              } else if (month >= 5 && month <= 9 && feelTemp >= 29 && feelTemp < 31) {
-                safetyGuide = "🔵 [양호] 현재 '양호' 단계이나 체감온도가 상승 중입니다!\n- 관심 단계(31℃)에 근접하고 있으니, 현장 작업자는 무더위에 대비하여 시원한 식수를 준비하고 컨디션을 조절해 주세요.";
-              } else {
-                safetyGuide = "🔵 [양호] 현재 기상 조건은 양호한 편입니다.\n- 규칙적인 휴식과 기본적인 현장 안전 수칙을 준수하며 작업해 주세요.";
-              }
+              tempGuideText = "🔵 [양호] 현재 기상 조건은 양호한 편입니다.\n- 규칙적인 휴식과 기본적인 현장 안전 수칙을 준수하며 작업해 주세요.";
             }
 
-            // 알림창(Alert) 메시지 조립 및 팝업 출력 (지저분한 따옴표 제거)
+            // 2. [💡 요구사항 반영] 특보 여부에 따라 멘트를 결합 또는 단독 출력 처리합니다.
+            let safetyGuide = "";
+            if (activeSpecialReport !== "특보 없음") {
+              // 특보가 있다면 특보 알림 멘트와 온도별 상세 멘트를 줄바꿈(\n\n)하여 둘 다 합쳐줍니다.
+              safetyGuide = `📢 [특보] 현재 해당 지역에 [${rawReportName}] 발령 중으로 규칙적인 휴식과 안전 수칙을 준수하여 작업해 주세요.\n\n${tempGuideText}`;
+            } else {
+              // 특보가 없다면 평소 온도별 상세 멘트만 나갑니다.
+              safetyGuide = tempGuideText;
+            }
+
             const displayReportText = (activeSpecialReport !== "특보 없음") ? `🚨 기상특보: [${rawReportName} 발령]` : "✅ 기상특보: [특보 없음]";
             let alertMessage = `☀️ 기상청 실시간 정보 연동 결과\n📍 현재 위치: ${addressName || "확인 완료"}\n🌡  실제 기온: ${T.toFixed(1)}°C | 체감 온도: ${feelTemp.toFixed(1)}°C\n📋 상황 안내: ${displayReportText}\n\n${safetyGuide}`;
             alert(alertMessage);
             
-            // 하단 대시보드 배지 활성화 처리
             const statusIds = ['status-good', 'status-care', 'status-warn', 'status-danger', 'status-severe', 'status-cold'];
             statusIds.forEach(id => {
               const el = document.getElementById(id);
@@ -1016,7 +1025,6 @@ async function fetchWeather(btn) {
               }
             });
 
-            // 특보가 떴을 때도 가시적으로 배지 하이라이팅 연동 유도
             let activeId = "status-good"; let ringColor = "ring-emerald-400";
             if (activeSpecialReport.includes("폭염경보") || feelTemp >= 38) { activeId = "status-severe"; ringColor = "ring-red-400"; }
             else if (activeSpecialReport.includes("폭염주의보") || feelTemp >= 35) { activeId = "status-danger"; ringColor = "ring-orange-400"; }
@@ -1027,7 +1035,6 @@ async function fetchWeather(btn) {
             const activeEl = document.getElementById(activeId);
             if (activeEl) { activeEl.classList.remove('opacity-30'); activeEl.classList.add('opacity-100', 'scale-105', 'ring-2', 'ring-offset-1', ringColor); }
 
-            // 화면 하단 안전 가이드 텍스트 박스 업데이트
             const msgBox = document.getElementById("status-message-box");
             if (msgBox) { msgBox.innerText = safetyGuide; msgBox.classList.remove('hidden'); }
 
@@ -1040,7 +1047,7 @@ async function fetchWeather(btn) {
         }
       });
     }
-
+    
     let defaultWorkList = ["H/W 점검", "시설물 점검", "공중선 최적화", "공중선 점검", "전원 작업", "무선국 수검"];
     let workList = [...defaultWorkList];
     const select = document.getElementById("what_do");
