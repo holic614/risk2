@@ -943,26 +943,84 @@
           } catch (spErr) { console.error("특보 데이터 파싱 에러:", spErr); }
 
           if (data?.response?.header?.resultCode === "00") {
-            const items = data.response.body.items.item;
-            const t1h = items.find(i => i.category === "T1H").obsrValue;
+            const items = data?.response?.body?.items?.item;
+
+            if (!items || !Array.isArray(items)) {
+              console.error("기상 데이터 없음");
+              return;
+            }
+
+            const t1h = items.find(i => i.category === "T1H")?.obsrValue;
+            if (t1h === undefined) {
+              console.error("기온(T1H) 데이터 없음");
+              return;
+            }
+
             const wsd = items.find(i => i.category === "WSD")?.obsrValue || 0;
             const reh = items.find(i => i.category === "REH")?.obsrValue || 50;
-            
-            const T = parseFloat(t1h); const V = parseFloat(wsd); const RH = parseFloat(reh);
-            let feelTemp = T; const month = new Date().getMonth() + 1;
 
-            if (month >= 5 && month <= 9) {
-              const Tw = T * Math.atan(0.151977 * Math.sqrt(RH + 8.313659)) + Math.atan(T + RH) - Math.atan(RH - 1.67633) + 0.00391838 * Math.pow(RH, 1.5) * Math.atan(0.023101 * RH) - 4.686035;
-              feelTemp = -0.2442 + 0.55399 * Tw + 0.45535 * T - 0.0022 * Math.pow(Tw, 2) + 0.00278 * Tw * T + 3.0;
+            const T = parseFloat(t1h);
+            const V = parseFloat(wsd);
+            const RH = parseFloat(reh);
+
+            if (isNaN(T) || isNaN(V) || isNaN(RH)) {
+              console.error("기상 데이터 파싱 오류");
+              return;
+            }
+
+            // 💡 기상청 공식 체감온도 계산
+            let feelTemp = T;
+            const currentMonth = new Date().getMonth() + 1;
+
+            if (currentMonth >= 5 && currentMonth <= 9) {
+
+              // ☀️ 여름철 체감온도
+              const Tw =
+                T * Math.atan(0.151977 * Math.sqrt(RH + 8.313659)) +
+                Math.atan(T + RH) -
+                Math.atan(RH - 1.67633) +
+                0.00391838 * Math.pow(RH, 1.5) *
+                Math.atan(0.023101 * RH) -
+                4.686035;
+
+              feelTemp =
+                -0.2442 +
+                (0.55399 * Tw) +
+                (0.45535 * T) -
+                (0.0022 * Math.pow(Tw, 2)) +
+                (0.00278 * Tw * T) +
+                3.0;
+
             } else {
+
+              // ❄️ 겨울철 체감온도
               const V_kmh = V * 3.6;
-              if (T <= 10 && V_kmh >= 4.8) {
-                feelTemp = 13.12 + 0.6215 * T - 11.37 * Math.pow(V_kmh, 0.16) + 0.3965 * T * Math.pow(V_kmh, 0.16);
+
+              // 기상청 기준 :
+              // 기온 10℃ 이하 AND 풍속 1.3m/s 이상
+              if (T <= 10 && V >= 1.3) {
+
+                feelTemp =
+                  13.12 +
+                  (0.6215 * T) -
+                  (11.37 * Math.pow(V_kmh, 0.16)) +
+                  (0.3965 * Math.pow(V_kmh, 0.16) * T);
+
+              } else {
+
+                // 조건 미충족 시 체감온도 = 기온
+                feelTemp = T;
               }
             }
 
-            document.getElementById("real_temperature").value = T.toFixed(1) + "°C";
-            document.getElementById("fake_temperature").value = feelTemp.toFixed(1) + "°C";
+            // 소수점 1자리 정리
+            feelTemp = Number(feelTemp.toFixed(1));
+
+            document.getElementById("real_temperature").value =
+              `${T.toFixed(1)}°C`;
+
+            document.getElementById("fake_temperature").value =
+              `${feelTemp.toFixed(1)}°C`;
             
             // UI 디자인 적용 영역
             const statusLabelTarget = document.getElementById("weather-full-status");
@@ -996,7 +1054,7 @@
               tempGuideText = "🟢 [관심] 더위가 시작되는 단계입니다!\n- 현장 근처에 시원한 식수를 상시 비치하세요.\n- 작업자의 건강 상태를 수시로 살피세요.";
             } else if (T <= -12) {
               tempGuideText = "❄️ [한파] 혹한기 야외 작업 주의!\n- 동상 예방을 위해 방한 장갑, 방한모 등 보호구를 철저히 착용하세요.\n- 따뜻한 음료를 주기적으로 섭취하고 작업자 간 건강 상태를 점검하세요.";
-            } else if (month >= 5 && month <= 9 && feelTemp >= 29 && feelTemp < 31) {
+            } else if (currentMonth >= 5 && currentMonth <= 9 && feelTemp >= 29 && feelTemp < 31) {
               tempGuideText = "🔵 [양호 ⬆] 현재 '양호' 단계이나 체감온도가 상승 중입니다!\n- 관심 단계(31℃)에 근접하고 있으니, 현장 작업자는 무더위에 대비하여 시원한 식수를 준비하고 컨디션을 조절해 주세요.";
             } else {
               tempGuideText = "🔵 [양호] 현재 기상 조건은 양호한 편입니다.\n- 규칙적인 휴식과 기본적인 현장 안전 수칙을 준수하며 작업해 주세요.";
