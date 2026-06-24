@@ -1,6 +1,6 @@
 {
-  "name": "현장 위험성 평가표",
-  "short_name": "위험성평가",
+  "name": "현장 위험성 평가표-T",
+  "short_name": "위험성평가-T",
   "start_url": "/risk2/",
   "scope": "/risk2/",
   "display": "standalone",
