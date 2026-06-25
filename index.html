@@ -855,256 +855,366 @@
       return rs;
     }
 
-// 필수 유지 기능 3 : 기온/체감온도 호출 및 원본 성공 알림창 정보 디스플레이 100% 보존
-    async function fetchWeather(btn) {
-      if (!navigator.geolocation) {
-        alert("GPS 위치 정보 권한 획득이 불가한 브라우저 환경입니다.");
+// =========================================================================
+// [기능 1] 프록시 폴백 체인
+// =========================================================================
+async function fetchWithProxyFallback(targetUrl, label = "") {
+  const proxies = [
+    (u) => u,
+    (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+  ];
+  const proxyNames = ["직접호출", "allorigins", "corsproxy", "codetabs"];
+
+  for (let pi = 0; pi < proxies.length; pi++) {
+    try {
+      console.log(`[프록시 시도] ${label} → ${proxyNames[pi]}`);
+      const response = await fetch(proxies[pi](targetUrl), { signal: AbortSignal.timeout(8000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      console.log(`[프록시 성공] ${label} → ${proxyNames[pi]} ✅`);
+      return response;
+    } catch (err) {
+      console.warn(`[프록시 실패] ${label} → ${proxyNames[pi]} ❌ ${err.message}`);
+    }
+  }
+  throw new Error(`[${label}] 모든 프록시 시도 실패`);
+}
+
+// =========================================================================
+// [기능 2] 위경도 → 기상청 지점코드(stnId) 변환
+// getPwnStatus는 stnId 기반으로 조회합니다
+// =========================================================================
+function getStnId(lat, lon) {
+  const stations = [
+    { id: "108", name: "서울",   region: ["서울", "경기"],             lat: 37.5714, lon: 126.9658 },
+    { id: "112", name: "인천",   region: ["인천"],                      lat: 37.4772, lon: 126.6247 },
+    { id: "119", name: "수원",   region: ["경기"],                      lat: 37.2683, lon: 127.0065 },
+    { id: "101", name: "춘천",   region: ["강원", "강원도"],            lat: 37.9025, lon: 127.7358 },
+    { id: "105", name: "강릉",   region: ["강원", "강원도"],            lat: 37.7514, lon: 128.8908 },
+    { id: "129", name: "서산",   region: ["충남", "충청남도"],          lat: 36.7767, lon: 126.4933 },
+    { id: "131", name: "청주",   region: ["충북", "충청북도"],          lat: 36.6394, lon: 127.4408 },
+    { id: "133", name: "대전",   region: ["대전"],                      lat: 36.3714, lon: 127.3742 },
+    { id: "136", name: "안동",   region: ["경북", "경상북도"],          lat: 36.5728, lon: 128.7089 },
+    { id: "138", name: "포항",   region: ["경북", "경상북도"],          lat: 36.0321, lon: 129.3800 },
+    { id: "143", name: "대구",   region: ["대구", "경북", "경상북도"],  lat: 35.8836, lon: 128.6181 },
+    { id: "146", name: "전주",   region: ["전북", "전라북도"],          lat: 35.8242, lon: 127.1481 },
+    { id: "152", name: "울산",   region: ["울산"],                      lat: 35.5597, lon: 129.3200 },
+    { id: "155", name: "창원",   region: ["경남", "경상남도"],          lat: 35.1686, lon: 128.5658 },
+    { id: "156", name: "광주",   region: ["광주", "전남", "전라남도"],  lat: 35.1714, lon: 126.8925 },
+    { id: "159", name: "부산",   region: ["부산"],                      lat: 35.1047, lon: 129.0319 },
+    { id: "165", name: "목포",   region: ["전남", "전라남도"],          lat: 34.8175, lon: 126.3814 },
+    { id: "168", name: "여수",   region: ["전남", "전라남도"],          lat: 34.7394, lon: 127.7397 },
+    { id: "184", name: "제주",   region: ["제주", "제주도"],            lat: 33.5144, lon: 126.5296 },
+    { id: "189", name: "서귀포", region: ["제주", "제주도"],            lat: 33.2458, lon: 126.5125 },
+  ];
+
+  let minDist = Infinity, nearest = stations[0];
+  for (const s of stations) {
+    const d = Math.pow(lat - s.lat, 2) + Math.pow(lon - s.lon, 2);
+    if (d < minDist) { minDist = d; nearest = s; }
+  }
+  console.log(`[지점코드] ${nearest.name} (stnId: ${nearest.id}), 지역키워드: [${nearest.region.join(", ")}]`);
+  return nearest;
+}
+
+// =========================================================================
+// [기능 3] t6 텍스트에서 내 지역 관련 특보 추출
+// =========================================================================
+function parseSpecialReport(t6Text, regionKeywords) {
+  console.log("[특보 t6 원문]", t6Text);
+
+  // "없 음" 또는 "없음" → 특보 없음
+  if (!t6Text || t6Text.replace(/\s/g, "").includes("없음")) {
+    console.log("[특보] t6 = 없음 → 특보 없음");
+    return { found: false, reportName: "", reportContent: "" };
+  }
+
+  // 특보 키워드 목록
+  const alertKeywords = [
+    "폭염경보", "폭염주의보",
+    "한파경보", "한파주의보",
+    "호우경보", "호우주의보",
+    "강풍경보", "강풍주의보",
+    "대설경보", "대설주의보",
+    "태풍경보", "태풍주의보",
+    "풍랑경보", "풍랑주의보",
+    "건조경보", "건조주의보",
+  ];
+
+  // 내 지역 키워드가 t6 텍스트에 포함되어 있는지 확인
+  const myRegionMatched = regionKeywords.some(keyword => t6Text.includes(keyword));
+  if (!myRegionMatched) {
+    console.log(`[특보] 내 지역(${regionKeywords.join("/")})이 t6 텍스트에 없음 → 해당 없음`);
+    return { found: false, reportName: "", reportContent: "" };
+  }
+
+  console.log(`[특보] 내 지역(${regionKeywords.join("/")}) 매칭됨!`);
+
+  // 어떤 종류의 특보인지 찾기
+  let reportName = "기상특보";
+  for (const keyword of alertKeywords) {
+    if (t6Text.includes(keyword)) {
+      reportName = keyword;
+      console.log(`[특보 종류] ${keyword}`);
+      break;
+    }
+  }
+
+  return { found: true, reportName, reportContent: t6Text.trim() };
+}
+
+// =========================================================================
+// [기능 4] 메인 함수
+// =========================================================================
+async function fetchWeather(btn) {
+  if (!navigator.geolocation) {
+    alert("GPS 위치 정보 권한 획득이 불가한 브라우저 환경입니다.");
+    return;
+  }
+
+  const originalText = btn ? btn.innerText : "위치 파악 중...";
+  if (btn) { btn.innerText = "📍 예보서버 통신 중..."; btn.disabled = true; }
+
+  navigator.geolocation.getCurrentPosition(async (position) => {
+    const lat = position.coords.latitude;
+    const lon = position.coords.longitude;
+    console.log(`[GPS] 위도: ${lat}, 경도: ${lon}`);
+
+    let addressName = "", currentGu = "", currentCity = "";
+
+    // ── 주소 역지오코딩 ──────────────────────────────────────────────────
+    try {
+      const addrRes = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1`,
+        { headers: { 'Accept-Language': 'ko' } }
+      );
+      const addrData = await addrRes.json();
+      currentCity = addrData.address.city || addrData.address.town || addrData.address.village || "";
+      currentGu   = addrData.address.borough || addrData.address.city_district || addrData.address.county || "";
+      const dong  = addrData.address.suburb || addrData.address.neighbourhood || addrData.address.quarter || "";
+      addressName = `${currentCity} ${currentGu} ${dong}`.replace(/\s+/g, " ").trim();
+      console.log(`[주소] ${addressName} | city: ${currentCity} | gu: ${currentGu}`);
+      const locInput = document.getElementById("location");
+      if (locInput && !locInput.value) locInput.value = addressName;
+    } catch (e) { console.error("[주소 조회 오류]", e); }
+
+    // ── 기상청 격자 변환 및 발표시각 계산 ───────────────────────────────
+    const grid = dfs_xy_conv(lat, lon);
+    console.log(`[격자] nx: ${grid.x}, ny: ${grid.y}`);
+
+    const nowObj = new Date();
+    if (nowObj.getMinutes() < 40) nowObj.setHours(nowObj.getHours() - 1);
+    const base_date = nowObj.getFullYear()
+      + String(nowObj.getMonth() + 1).padStart(2, '0')
+      + String(nowObj.getDate()).padStart(2, '0');
+    const base_time = String(nowObj.getHours()).padStart(2, '0') + '00';
+    console.log(`[발표시각] ${base_date} ${base_time}`);
+
+    // ── 내 위치 지점코드 + 지역 키워드 계산 ──────────────────────────────
+    const myStation = getStnId(lat, lon);
+    // 지역 매칭 키워드: 지점 region 배열 + currentCity + currentGu 조합
+    const regionKeywords = [...new Set([
+      ...myStation.region,
+      currentCity,
+      currentGu,
+      myStation.name,
+    ].filter(Boolean))];
+    console.log(`[지역 키워드] ${regionKeywords.join(", ")}`);
+
+    const serviceKey = "32hx6v6b6YOkxCDbGAZv1sVAmobH2HCcPvhz9Jd88b0z1ee7nKtKJE1MTOj3gOwzp9LD8HhILa0cCjvMj5X9rQ==";
+
+    // ✅ serviceKey의 == 을 직접 URL에 삽입 (encodeURIComponent 사용 시 %3D%3D 이중인코딩 → 429 발생)
+    // fetchWithProxyFallback 내부에서 프록시 경유 시 encodeURIComponent(전체URL) 처리됨
+    const specialApiUrl = `https://apis.data.go.kr/1360000/WthrWrnInfoService/getPwnStatus`
+      + `?serviceKey=${serviceKey}`
+      + `&pageNo=1&numOfRows=5&dataType=XML`
+      + `&stnId=${myStation.id}`;
+
+    const weatherApiUrl = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst`
+      + `?serviceKey=${serviceKey}`
+      + `&pageNo=1&numOfRows=1000&dataType=JSON`
+      + `&base_date=${base_date}&base_time=${base_time}&nx=${grid.x}&ny=${grid.y}`;
+
+    try {
+      let activeSpecialReport = "특보 없음";
+      let rawReportName = "";
+      let reportContent = ""; // ✅ 특보 전문 텍스트
+
+      // ── 특보현황 조회 (getPwnStatus) ─────────────────────────────────────
+      try {
+        const spResponse = await fetchWithProxyFallback(specialApiUrl, "특보API");
+        const spText = await spResponse.text();
+        console.log("[특보 응답 원문]", spText.substring(0, 600));
+
+        // XML 파싱
+        const xml = new DOMParser().parseFromString(spText, "text/xml");
+        const resultCode = xml.querySelector("resultCode")?.textContent;
+
+        if (resultCode === "00") {
+          // 최신 항목의 t6 필드 가져오기
+          const items = xml.querySelectorAll("item");
+          console.log(`[특보] 항목 수: ${items.length}`);
+
+          for (const item of items) {
+            const t6 = item.querySelector("t6")?.textContent || "";
+            const result = parseSpecialReport(t6, regionKeywords);
+
+            if (result.found) {
+              rawReportName        = result.reportName;
+              activeSpecialReport  = result.reportName + " 발령";
+              reportContent        = result.reportContent;
+              break;
+            }
+          }
+        } else {
+          console.warn("[특보] resultCode 비정상:", resultCode);
+        }
+      } catch (spErr) {
+        console.warn("[특보 조회 실패 - 날씨는 계속 진행]:", spErr.message);
+      }
+
+      console.log(`[특보 최종] ${activeSpecialReport}`);
+      if (reportContent) console.log("[특보 내용]", reportContent);
+
+      // ── 날씨 조회 ────────────────────────────────────────────────────────
+      const response = await fetchWithProxyFallback(weatherApiUrl, "날씨API");
+      const weatherText = await response.text();
+      console.log("[날씨 응답 원문]", weatherText.substring(0, 200));
+
+      let data;
+      try { data = JSON.parse(weatherText); }
+      catch (e) {
+        console.error("[날씨] JSON 파싱 실패:", e.message);
+        alert("날씨 데이터 파싱 실패. F12 콘솔을 확인해주세요.");
         return;
       }
-      const originalText = btn ? btn.innerText : "위치 파악 중...";
-      if(btn) { btn.innerText = "📍 예보서버 통신 중..."; btn.disabled = true; }
 
-      navigator.geolocation.getCurrentPosition(async (position) => {
-        const lat = position.coords.latitude;
-        const lon = position.coords.longitude;
-        let addressName = "";
-        let currentGu = ""; 
-        
-        try {
-          const addrRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1`, {
-            headers: { 'Accept-Language': 'ko' }
-          });
-          const addrData = await addrRes.json();
-          if (addrData && addrData.address) {
-            const city = addrData.address.city || addrData.address.town || addrData.address.village || "";
-            const gu = addrData.address.borough || addrData.address.city_district || addrData.address.county || "";
-            const dong = addrData.address.suburb || addrData.address.neighbourhood || addrData.address.quarter || "";
-            addressName = `${city} ${gu} ${dong}`.replace(/\s+/g, " ").trim();
-            currentGu = gu || city; 
-            const locInput = document.getElementById("location");
-            if(locInput && !locInput.value) locInput.value = addressName;
-          }
-        } catch (e) { console.error(e); }
+      if (data?.response?.header?.resultCode === "00") {
+        const items = data.response.body.items.item;
+        const T  = parseFloat(items.find(i => i.category === "T1H")?.obsrValue ?? NaN);
+        const V  = parseFloat(items.find(i => i.category === "WSD")?.obsrValue ?? 0);
+        const RH = parseFloat(items.find(i => i.category === "REH")?.obsrValue ?? 50);
+        console.log(`[날씨] 기온: ${T}°C, 풍속: ${V}m/s, 습도: ${RH}%`);
 
-        const grid = dfs_xy_conv(lat, lon);
-        // 💡 기상청 초단기실황 최신 발표시각 계산
-        const nowObj = new Date();
+        if (isNaN(T)) { alert("기온(T1H) 데이터를 받지 못했습니다."); return; }
 
-        // 매시 40분 이전이면 직전 시간 자료 사용
-        if (nowObj.getMinutes() < 40) {
-          nowObj.setHours(nowObj.getHours() - 1);
+        // ── 체감온도 계산 ─────────────────────────────────────────────────
+        let feelTemp = T;
+        const month = new Date().getMonth() + 1;
+        if (month >= 5 && month <= 9) {
+          const Tw =
+            T * Math.atan(0.151977 * Math.sqrt(RH + 8.313659))
+            + Math.atan(T + RH) - Math.atan(RH - 1.67633)
+            + 0.00391838 * Math.pow(RH, 1.5) * Math.atan(0.023101 * RH) - 4.686035;
+          feelTemp = -0.2442 + 0.55399 * Tw + 0.45535 * T - 0.0022 * Math.pow(Tw, 2) + 0.00278 * Tw * T + 3.0;
+        } else if (T <= 10 && V >= 1.3) {
+          const V_kmh = V * 3.6;
+          feelTemp = 13.12 + 0.6215 * T - 11.37 * Math.pow(V_kmh, 0.16) + 0.3965 * Math.pow(V_kmh, 0.16) * T;
+        }
+        feelTemp = Number(feelTemp.toFixed(1));
+        console.log(`[체감온도] ${feelTemp}°C`);
+
+        // ── UI 바인딩 ──────────────────────────────────────────────────────
+        document.getElementById("real_temperature").value = `${T.toFixed(1)}°C`;
+        document.getElementById("fake_temperature").value = `${feelTemp.toFixed(1)}°C`;
+
+        const statusLabelTarget = document.getElementById("weather-full-status");
+        if (statusLabelTarget) {
+          statusLabelTarget.innerHTML = activeSpecialReport !== "특보 없음"
+            ? `<span class="text-slate-700 font-semibold">기상특보 :</span>
+               <span class="ml-1 inline-block px-2.5 py-1 text-[13px] font-black text-rose-700 bg-rose-50 border border-rose-300 rounded-md shadow-sm animate-pulse">[ ${rawReportName} 발령 ]</span>`
+            : `<span class="text-slate-500">기상특보 :</span>
+               <span class="ml-1 inline-block px-2.5 py-1 text-[12px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-md">[ 특보 없음 ]</span>`;
         }
 
-        const base_date =
-          nowObj.getFullYear() +
-          String(nowObj.getMonth() + 1).padStart(2, '0') +
-          String(nowObj.getDate()).padStart(2, '0');
+        // ── 온도별 안전 가이드 멘트 ───────────────────────────────────────
+        let tempGuideText = "";
+        if      (feelTemp >= 38) tempGuideText = "🔴 [위험] 극심한 무더위 단계입니다!\n- 야외 작업을 즉시 중단하고 시원한 곳으로 대피하세요.\n- 열사병 발생 위험이 매우 높으므로 상호 건강상태를 강제로 확인하세요.";
+        else if (feelTemp >= 35) tempGuideText = "🟠 [경고] 매우 무더운 단계입니다!\n- 오후 시간대(14~17시) 옥외작업을 제한하고 휴식시간을 가지세요.\n- 시원한 물과 염분을 충분히 섭취하시기 바랍니다.";
+        else if (feelTemp >= 33) tempGuideText = "🟡 [주의] 무더위가 심한 단계입니다!\n- 매 시간당 10~15분씩 그늘에서 정기적인 휴식을 취하세요.\n- 몸에 이상을 느끼면 즉시 관리자에게 보고하고 작업을 중지하세요.";
+        else if (feelTemp >= 31) tempGuideText = "🟢 [관심] 더위가 시작되는 단계입니다!\n- 현장 근처에 시원한 식수를 상시 비치하세요.\n- 작업자의 건강 상태를 수시로 살피세요.";
+        else if (T <= -12)       tempGuideText = "❄️ [한파] 혹한기 야외 작업 주의!\n- 동상 예방을 위해 방한 장갑, 방한모 등 보호구를 철저히 착용하세요.\n- 따뜻한 음료를 주기적으로 섭취하고 작업자 간 건강 상태를 점검하세요.";
+        else if (month >= 5 && month <= 9 && feelTemp >= 29 && feelTemp < 31)
+                                 tempGuideText = "🔵 [양호 ⬆] 현재 '양호' 단계이나 체감온도가 상승 중입니다!\n- 관심 단계(31℃)에 근접하고 있으니, 시원한 식수를 준비하고 컨디션을 조절해 주세요.";
+        else                     tempGuideText = "🔵 [양호] 현재 기상 조건은 양호한 편입니다.\n- 규칙적인 휴식과 기본적인 현장 안전 수칙을 준수하며 작업해 주세요.";
 
-        const base_time =
-          String(nowObj.getHours()).padStart(2, '0') + '00';     
-        const serviceKey = "32hx6v6b6YOkxCDbGAZv1sVAmobH2HCcPvhz9Jd88b0z1ee7nKtKJE1MTOj3gOwzp9LD8HhILa0cCjvMj5X9rQ%3D%3D";
-        const url = `https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst?serviceKey=${serviceKey}&pageNo=1&numOfRows=1000&dataType=JSON&base_date=${base_date}&base_time=${base_time}&nx=${grid.x}&ny=${grid.y}`;
-        
-        // 기상특보조회서비스 API URL
-        const specialReportUrl = `https://apis.data.go.kr/1360000/WthrWrngInfoService/getCcwAnfc?serviceKey=${serviceKey}&pageNo=1&numOfRows=20&dataType=JSON`;
-
-        try {
-          const response = await fetch(url);
-          const data = await response.json();
-          
-          let activeSpecialReport = "특보 없음";
-          let rawReportName = ""; 
-          
-          try {
-            const spResponse = await fetch(specialReportUrl);
-            const spData = await spResponse.json();
-            if (spData?.response?.header?.resultCode === "00") {
-              const spItems = spData.response.body.items.item;
-              if (spItems && spItems.length > 0) {
-                for (let item of spItems) {
-                  const content = item.content || "";
-                  const title = item.title || "";
-                  
-                  if (currentGu && (content.includes(currentGu) || title.includes(currentGu))) {
-                    if (content.includes("폭염경보")) { rawReportName = "폭염경보"; activeSpecialReport = "폭염경보 발령"; }
-                    else if (content.includes("폭염주의보")) { rawReportName = "폭염주의보"; activeSpecialReport = "폭염주의보 발령"; }
-                    else if (content.includes("한파경보")) { rawReportName = "한파경보"; activeSpecialReport = "한파경보 발령"; }
-                    else if (content.includes("한파주의보")) { rawReportName = "한파주의보"; activeSpecialReport = "한파주의보 발령"; }
-                    else if (content.includes("호우경보")) { rawReportName = "호우경보"; activeSpecialReport = "호우경보 발령"; }
-                    else if (content.includes("호우주의보")) { rawReportName = "호우주의보"; activeSpecialReport = "호우주의보 발령"; }
-                    else if (content.includes("강풍경보")) { rawReportName = "강풍경보"; activeSpecialReport = "강풍경보 발령"; }
-                    else if (content.includes("강풍주의보")) { rawReportName = "강풍주의보"; activeSpecialReport = "강풍주의보 발령"; }
-                    
-                    if (activeSpecialReport !== "특보 없음") break;
-                  }
-                }
-              }
-            }
-          } catch (spErr) { console.error("특보 데이터 파싱 에러:", spErr); }
-
-          if (data?.response?.header?.resultCode === "00") {
-            const items = data?.response?.body?.items?.item;
-
-            if (!items || !Array.isArray(items)) {
-              console.error("기상 데이터 없음");
-              return;
-            }
-
-            const t1h = items.find(i => i.category === "T1H")?.obsrValue;
-            if (t1h === undefined) {
-              console.error("기온(T1H) 데이터 없음");
-              return;
-            }
-
-            const wsd = items.find(i => i.category === "WSD")?.obsrValue || 0;
-            const reh = items.find(i => i.category === "REH")?.obsrValue || 50;
-
-            const T = parseFloat(t1h);
-            const V = parseFloat(wsd);
-            const RH = parseFloat(reh);
-
-            if (isNaN(T) || isNaN(V) || isNaN(RH)) {
-              console.error("기상 데이터 파싱 오류");
-              return;
-            }
-
-            // 💡 기상청 공식 체감온도 계산
-            let feelTemp = T;
-            const currentMonth = new Date().getMonth() + 1;
-
-            if (currentMonth >= 5 && currentMonth <= 9) {
-
-              // ☀️ 여름철 체감온도
-              const Tw =
-                T * Math.atan(0.151977 * Math.sqrt(RH + 8.313659)) +
-                Math.atan(T + RH) -
-                Math.atan(RH - 1.67633) +
-                0.00391838 * Math.pow(RH, 1.5) *
-                Math.atan(0.023101 * RH) -
-                4.686035;
-
-              feelTemp =
-                -0.2442 +
-                (0.55399 * Tw) +
-                (0.45535 * T) -
-                (0.0022 * Math.pow(Tw, 2)) +
-                (0.00278 * Tw * T) +
-                3.0;
-
-            } else {
-
-              // ❄️ 겨울철 체감온도
-              const V_kmh = V * 3.6;
-
-              // 기상청 기준 :
-              // 기온 10℃ 이하 AND 풍속 1.3m/s 이상
-              if (T <= 10 && V >= 1.3) {
-
-                feelTemp =
-                  13.12 +
-                  (0.6215 * T) -
-                  (11.37 * Math.pow(V_kmh, 0.16)) +
-                  (0.3965 * Math.pow(V_kmh, 0.16) * T);
-
-              } else {
-
-                // 조건 미충족 시 체감온도 = 기온
-                feelTemp = T;
-              }
-            }
-
-            // 소수점 1자리 정리
-            feelTemp = Number(feelTemp.toFixed(1));
-
-            document.getElementById("real_temperature").value =
-              `${T.toFixed(1)}°C`;
-
-            document.getElementById("fake_temperature").value =
-              `${feelTemp.toFixed(1)}°C`;
-            
-            // UI 디자인 적용 영역
-            const statusLabelTarget = document.getElementById("weather-full-status");
-            if (statusLabelTarget) {
-              if (activeSpecialReport !== "특보 없음" && rawReportName) {
-                statusLabelTarget.innerHTML = `
-                  <span class="text-slate-700 font-semibold">기상특보 :</span> 
-                  <span class="ml-1 inline-block px-2.5 py-1 text-[13px] font-black text-rose-700 bg-rose-50 border border-rose-300 rounded-md shadow-sm animate-pulse">
-                    [ ${rawReportName} 발령 ]
-                  </span>
-                `;
-              } else {
-                statusLabelTarget.innerHTML = `
-                  <span class="text-slate-500">기상특보 :</span> 
-                  <span class="ml-1 inline-block px-2.5 py-1 text-[12px] font-bold text-slate-500 bg-slate-100 border border-slate-200 rounded-md">
-                    [ 특보 없음 ]
-                  </span>
-                `;
-              }
-            }
-
-            // 1. 먼저 실시간 온도 기준에 맞춘 기본 멘트를 추출합니다.
-            let tempGuideText = "";
-            if (feelTemp >= 38) {
-              tempGuideText = "🔴 [위험] 극심한 무더위 단계입니다!\n- 야외 작업을 즉시 중단하고 시원한 곳으로 대피하세요.\n- 열사병 발생 위험이 매우 높으므로 상호 건강상태를 강제로 확인하세요.";
-            } else if (feelTemp >= 35) {
-              tempGuideText = "🟠 [경고] 매우 무더운 단계입니다!\n- 오후 시간대(14~17시) 옥외작업을 제한하고 휴식시간을 가지세요.\n- 시원한 물 and 염분을 충분히 섭취하시기 바랍니다.";
-            } else if (feelTemp >= 33) {
-              tempGuideText = "🟡 [주의] 무더위가 심한 단계입니다!\n- 매 시간당 10~15분씩 그늘에서 정기적인 휴식을 취하세요.\n- 몸에 이상을 느끼면 즉시 관리자에게 보고하고 작업을 중지하세요.";
-            } else if (feelTemp >= 31) {
-              tempGuideText = "🟢 [관심] 더위가 시작되는 단계입니다!\n- 현장 근처에 시원한 식수를 상시 비치하세요.\n- 작업자의 건강 상태를 수시로 살피세요.";
-            } else if (T <= -12) {
-              tempGuideText = "❄️ [한파] 혹한기 야외 작업 주의!\n- 동상 예방을 위해 방한 장갑, 방한모 등 보호구를 철저히 착용하세요.\n- 따뜻한 음료를 주기적으로 섭취하고 작업자 간 건강 상태를 점검하세요.";
-            } else if (currentMonth >= 5 && currentMonth <= 9 && feelTemp >= 29 && feelTemp < 31) {
-              tempGuideText = "🔵 [양호 ⬆] 현재 '양호' 단계이나 체감온도가 상승 중입니다!\n- 관심 단계(31℃)에 근접하고 있으니, 현장 작업자는 무더위에 대비하여 시원한 식수를 준비하고 컨디션을 조절해 주세요.";
-            } else {
-              tempGuideText = "🔵 [양호] 현재 기상 조건은 양호한 편입니다.\n- 규칙적인 휴식과 기본적인 현장 안전 수칙을 준수하며 작업해 주세요.";
-            }
-
-            // 2. [💡 요구사항 반영] 특보 여부에 따라 멘트를 결합 또는 단독 출력 처리합니다.
-            let safetyGuide = "";
-            if (activeSpecialReport !== "특보 없음") {
-              // 특보가 있다면 특보 알림 멘트와 온도별 상세 멘트를 줄바꿈(\n\n)하여 둘 다 합쳐줍니다.
-              safetyGuide = `📢 [특보] 현재 해당 지역에 [${rawReportName}] 발령 중으로 규칙적인 휴식과 안전 수칙을 준수하여 작업해 주세요.\n\n${tempGuideText}`;
-            } else {
-              // 특보가 없다면 평소 온도별 상세 멘트만 나갑니다.
-              safetyGuide = tempGuideText;
-            }
-
-            const displayReportText = (activeSpecialReport !== "특보 없음") ? `🚨 기상특보: [${rawReportName} 발령]` : "✅ 기상특보: [특보 없음]";
-            let alertMessage = `☀️ 기상청 실시간 정보 연동 결과\n📍 현재 위치: ${addressName || "확인 완료"}\n🌡  실제 기온: ${T.toFixed(1)}°C | 체감 온도: ${feelTemp.toFixed(1)}°C\n📋 상황 안내: ${displayReportText}\n\n${safetyGuide}`;
-            alert(alertMessage);
-            
-            const statusIds = ['status-good', 'status-care', 'status-warn', 'status-danger', 'status-severe', 'status-cold'];
-            statusIds.forEach(id => {
-              const el = document.getElementById(id);
-              if (el) {
-                el.classList.add('opacity-30');
-                el.classList.remove('opacity-100', 'scale-105', 'ring-2', 'ring-offset-1', 'ring-emerald-400', 'ring-green-400', 'ring-amber-400', 'ring-orange-400', 'ring-red-400', 'ring-blue-400');
-              }
-            });
-
-            let activeId = "status-good"; let ringColor = "ring-emerald-400";
-            if (activeSpecialReport.includes("폭염경보") || feelTemp >= 38) { activeId = "status-severe"; ringColor = "ring-red-400"; }
-            else if (activeSpecialReport.includes("폭염주의보") || feelTemp >= 35) { activeId = "status-danger"; ringColor = "ring-orange-400"; }
-            else if (feelTemp >= 33) { activeId = "status-warn"; ringColor = "ring-amber-400"; }
-            else if (feelTemp >= 31) { activeId = "status-care"; ringColor = "ring-green-400"; }
-            else if (T <= -12) { activeId = "status-cold"; ringColor = "ring-blue-400"; }
-
-            const activeEl = document.getElementById(activeId);
-            if (activeEl) { activeEl.classList.remove('opacity-30'); activeEl.classList.add('opacity-100', 'scale-105', 'ring-2', 'ring-offset-1', ringColor); }
-
-            const msgBox = document.getElementById("status-message-box");
-            if (msgBox) { msgBox.innerText = safetyGuide; msgBox.classList.remove('hidden'); }
-
-            generateImage();
-          }
-        } catch (error) {
-          alert("기상 데이터 수급에 에러가 발생했습니다.");
-        } finally {
-          if (btn) { btn.innerText = originalText; btn.disabled = false; }
+        // ✅ 특보 있으면: 온도 가이드 + 특보 전문 내용 모두 표시
+        let safetyGuide = "";
+        if (activeSpecialReport !== "특보 없음") {
+          safetyGuide =
+            `📢 [특보] 현재 해당 지역에 [${rawReportName}] 발령 중입니다.\n\n`
+            + tempGuideText
+            + (reportContent ? `\n\n━━━━━━━━━━━━━━━━━━━━\n📋 기상청 특보 내용\n━━━━━━━━━━━━━━━━━━━━\n${reportContent}` : "");
+        } else {
+          safetyGuide = tempGuideText;
         }
-      });
+
+        // ── 팝업 알림창 ──────────────────────────────────────────────────────
+        const displayReportText = activeSpecialReport !== "특보 없음"
+          ? `🚨 기상특보: [${rawReportName} 발령]`
+          : "✅ 기상특보: [특보 없음]";
+        alert(
+          `☀️ 기상청 실시간 정보 연동 결과\n`
+          + `📍 현재 위치: ${addressName || "확인 완료"}\n`
+          + `🌡 실제 기온: ${T.toFixed(1)}°C | 체감 온도: ${feelTemp.toFixed(1)}°C\n`
+          + `💧 현재 습도: ${RH}%\n`
+          + `📋 상황 안내: ${displayReportText}\n\n`
+          + safetyGuide
+        );
+
+        // ── 상태 메시지 박스 ─────────────────────────────────────────────────
+        const msgBox = document.getElementById("status-message-box");
+        if (msgBox) { msgBox.innerText = safetyGuide; msgBox.classList.remove('hidden'); }
+
+        // ── 신호등 애니메이션 ─────────────────────────────────────────────────
+        const statusIds = ['status-good','status-care','status-warn','status-danger','status-severe','status-cold'];
+        statusIds.forEach(id => {
+          const el = document.getElementById(id);
+          if (el) {
+            el.classList.add('opacity-30');
+            el.classList.remove('opacity-100','scale-105','ring-2','ring-offset-1',
+              'ring-emerald-400','ring-green-400','ring-amber-400','ring-orange-400','ring-red-400','ring-blue-400');
+          }
+        });
+
+        let activeId = "status-good", ringColor = "ring-emerald-400";
+        if      (activeSpecialReport.includes("폭염경보")  || feelTemp >= 38) { activeId = "status-severe"; ringColor = "ring-red-400"; }
+        else if (activeSpecialReport.includes("폭염주의보") || feelTemp >= 35) { activeId = "status-danger"; ringColor = "ring-orange-400"; }
+        else if (feelTemp >= 33) { activeId = "status-warn";  ringColor = "ring-amber-400"; }
+        else if (feelTemp >= 31) { activeId = "status-care";  ringColor = "ring-green-400"; }
+        else if (T <= -12)       { activeId = "status-cold";  ringColor = "ring-blue-400"; }
+
+        const activeEl = document.getElementById(activeId);
+        if (activeEl) {
+          activeEl.classList.remove('opacity-30');
+          activeEl.classList.add('opacity-100','scale-105','ring-2','ring-offset-1', ringColor);
+        }
+
+        generateImage();
+
+      } else {
+        const code = data?.response?.header?.resultCode;
+        const msg  = data?.response?.header?.resultMsg;
+        console.error(`[날씨 API 오류] ${code}: ${msg}`);
+        alert(`기상 API 오류 (${code}): ${msg}`);
+      }
+
+    } catch (error) {
+      console.error("[날씨 데이터 수급 최종 실패]:", error);
+      alert("기상 데이터 수급에 실패했습니다.\nF12 > 콘솔 탭에서 오류 내용을 확인해 주세요.");
+    } finally {
+      if (btn) { btn.innerText = originalText; btn.disabled = false; }
     }
+
+  }, (geoError) => {
+    const geoMsg = {1:"위치 권한이 거부됨", 2:"위치를 가져올 수 없음", 3:"요청 시간 초과"}[geoError.code] || "알 수 없는 오류";
+    console.error(`[GPS 오류] ${geoError.code}: ${geoMsg}`);
+    alert(`위치 정보를 가져올 수 없습니다.\n원인: ${geoMsg}`);
+    if (btn) { btn.innerText = originalText; btn.disabled = false; }
+  });
+}
+
     
     let defaultWorkList = ["H/W 점검", "시설물 점검", "공중선 최적화", "공중선 점검", "전원 작업", "무선국 수검"];
     let workList = [...defaultWorkList];
