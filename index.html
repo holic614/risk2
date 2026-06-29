@@ -1203,11 +1203,11 @@ async function fetchWeather(btn) {
         });
 
         let activeId = "status-good", ringColor = "ring-emerald-400";
-        if      (activeSpecialReport.includes("폭염경보")  || feelTemp >= 38) { activeId = "status-severe"; ringColor = "ring-red-400"; }
-        else if (activeSpecialReport.includes("폭염주의보") || feelTemp >= 35) { activeId = "status-danger"; ringColor = "ring-orange-400"; }
-        else if (feelTemp >= 33) { activeId = "status-warn";  ringColor = "ring-amber-400"; }
-        else if (feelTemp >= 31) { activeId = "status-care";  ringColor = "ring-green-400"; }
-        else if (T <= -12)       { activeId = "status-cold";  ringColor = "ring-blue-400"; }
+        if      (feelTemp >= 38) { activeId = "status-severe"; ringColor = "ring-red-400"; }
+        else if (feelTemp >= 35) { activeId = "status-danger"; ringColor = "ring-orange-400"; }
+        else if (feelTemp >= 33) { activeId = "status-warn";   ringColor = "ring-amber-400"; }
+        else if (feelTemp >= 31) { activeId = "status-care";   ringColor = "ring-green-400"; }
+        else if (T <= -12)       { activeId = "status-cold";   ringColor = "ring-blue-400"; }
 
         const activeEl = document.getElementById(activeId);
         if (activeEl) {
